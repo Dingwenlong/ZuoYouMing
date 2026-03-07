@@ -164,7 +164,8 @@ const submitAppeal = async () => {
   submitting.value = true
   try {
     await submitAppealApi(currentRecord.value.id, {
-      reason: appealReason.value
+      reason: appealReason.value,
+      appealType: 'OTHER'
     })
     message.success('申诉已提交，请等待管理员审核')
     appealVisible.value = false

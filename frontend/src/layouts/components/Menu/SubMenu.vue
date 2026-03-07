@@ -30,7 +30,8 @@ import {
   FileTextOutlined,
   EnvironmentOutlined,
   CommentOutlined,
-  ProjectOutlined
+  ProjectOutlined,
+  HistoryOutlined
 } from '@ant-design/icons-vue'
 import type { MenuItem } from '../../../api/menu'
 
@@ -47,7 +48,8 @@ const iconMap: Record<string, any> = {
   FileTextOutlined,
   EnvironmentOutlined,
   CommentOutlined,
-  ProjectOutlined
+  ProjectOutlined,
+  HistoryOutlined
 }
 </script>
 

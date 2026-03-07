@@ -3,20 +3,15 @@ package com.library.seat.modules.occupancy.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.library.seat.modules.occupancy.entity.SeatOccupancy;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
 
-import java.util.List;
-
+/**
+ * 占座检测记录 Mapper（已弃用）
+ * 占座检测逻辑已迁移到 sys_reservation 表
+ * 保留此类以兼容历史数据，新代码不再使用
+ */
 @Mapper
+@Deprecated
 public interface SeatOccupancyMapper extends BaseMapper<SeatOccupancy> {
-
-    @Select("SELECT * FROM sys_seat_occupancy WHERE reservation_id = #{reservationId} LIMIT 1")
-    SeatOccupancy selectByReservationId(@Param("reservationId") Long reservationId);
-
-    @Select("SELECT * FROM sys_seat_occupancy WHERE occupancy_status IN ('normal', 'warning') ORDER BY update_time DESC")
-    List<SeatOccupancy> selectActiveMonitoringList();
-
-    @Select("SELECT * FROM sys_seat_occupancy WHERE user_id = #{userId} ORDER BY create_time DESC LIMIT 10")
-    List<SeatOccupancy> selectRecentByUserId(@Param("userId") Long userId);
+    // 所有方法已迁移到 ReservationService
+    // 保留此类以兼容历史数据查询
 }

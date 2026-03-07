@@ -204,7 +204,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { FileProtectOutlined } from '@ant-design/icons-vue'
 import { getAllAppeals, reviewAppeal, type AppealRecord } from '../../api/reservation'
 

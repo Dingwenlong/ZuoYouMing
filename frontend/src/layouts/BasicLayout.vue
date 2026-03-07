@@ -118,9 +118,6 @@
                   <a-menu-item key="profile" @click="router.push('/profile/info')">
                     <user-outlined /> 个人中心
                   </a-menu-item>
-                  <a-menu-item v-if="!userStore.isNewUser" key="history" @click="router.push('/profile/history')">
-                    <history-outlined /> 预约/签到记录
-                  </a-menu-item>
                   <a-menu-divider />
                   <a-menu-item key="logout" @click="handleLogout">
                     <logout-outlined /> 退出登录
@@ -158,8 +155,7 @@ import {
   FullscreenOutlined,
   FullscreenExitOutlined,
   ReloadOutlined,
-  LogoutOutlined,
-  HistoryOutlined
+  LogoutOutlined
 } from '@ant-design/icons-vue'
 import { useUserStore } from '../stores/user'
 import { message, notification } from 'ant-design-vue'

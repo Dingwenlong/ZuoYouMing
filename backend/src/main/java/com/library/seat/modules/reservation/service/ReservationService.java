@@ -1,11 +1,14 @@
 package com.library.seat.modules.reservation.service;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -26,6 +29,8 @@ import com.library.seat.modules.sys.service.UserDetailsServiceImpl;
 
 @Service
 public class ReservationService extends ServiceImpl<ReservationMapper, Reservation> {
+
+    private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
 
     @Autowired
     private SeatService seatService;
@@ -115,8 +120,8 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
     @Transactional(rollbackFor = Exception.class)
     public Result<Map<String, Object>> reserve(Reservation reservation) {
         String lockKey = "lock:seat:" + reservation.getSeatId();
-        // 简单分布式锁 (SetNX)
-        Boolean lock = redisTemplate.opsForValue().setIfAbsent(lockKey, String.valueOf(reservation.getUserId()), 10, TimeUnit.SECONDS);
+        // 简单分布式锁 (SetNX) - 延长锁时间到30秒，防止批量预约时锁过期
+        Boolean lock = redisTemplate.opsForValue().setIfAbsent(lockKey, String.valueOf(reservation.getUserId()), 30, TimeUnit.SECONDS);
 
         if (Boolean.FALSE.equals(lock)) {
             return Result.error("该座位正在被抢占，请稍后重试");
@@ -146,7 +151,7 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
                 }
             }
 
-            // 2. 检查冲突 (座位冲突和用户冲突)
+            // 2. 预检查：验证所有时段是否都可用（避免部分预约成功）
             for (String slot : slots) {
                 // 检查座位在该时段是否已被占用
                 Long seatOccupied = this.baseMapper.selectCount(new LambdaQueryWrapper<Reservation>()
@@ -167,10 +172,11 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
                 }
             }
 
-            // 3. 创建预约
+            // 3. 创建预约 - 使用批量插入确保原子性
             Date now = new Date();
             List<Reservation> createdReservations = new java.util.ArrayList<>();
             
+            // 先构建所有预约对象
             for (String slot : slots) {
                 Reservation res = new Reservation();
                 org.springframework.beans.BeanUtils.copyProperties(reservation, res);
@@ -221,9 +227,11 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
                 
                 res.setDeadline(new Date(Math.max(standardDeadline, graceDeadline)));
                 res.setCreateTime(now);
-                this.save(res);
                 createdReservations.add(res);
             }
+            
+            // 批量保存所有预约 - 使用saveBatch确保原子性
+            this.saveBatch(createdReservations);
 
             // 4. 更新座位实时状态 (如果当前有时段被占用，则设为 occupied)
             updateSeatRealtimeStatus(reservation.getSeatId());
@@ -370,13 +378,21 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
             return Result.error("请开启定位并扫码进行签到");
         }
 
+        // 保存原始状态用于判断签到类型
+        String originalStatus = reservation.getStatus();
+        
         // 更新预约状态
         reservation.setStatus("checked_in");
         reservation.setDeadline(null); // 清除截止时间
         this.updateById(reservation);
 
-        // 创建占座检测记录
-        occupancyMonitorService.createOccupancyRecord(reservation.getId(), userId, reservation.getSeatId());
+        // 更新在场时间（用于占座检测）
+        // 区分首次签到和暂离返回
+        if ("away".equals(originalStatus)) {
+            this.confirmPresence(reservation.getId(), com.library.seat.modules.reservation.enums.PresenceType.TEMP_RETURN);
+        } else {
+            this.confirmPresence(reservation.getId(), com.library.seat.modules.reservation.enums.PresenceType.CHECK_IN);
+        }
 
         // 处理连续时段自动签到
         autoCheckInNextSlots(reservation);
@@ -428,8 +444,8 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         reservation.setDeadline(new Date(System.currentTimeMillis() + (long) violationTime * 60 * 1000));
         this.updateById(reservation);
 
-        // 更新占座检测记录
-        occupancyMonitorService.updateLastDetectedTime(reservation.getId());
+        // 暂离时不更新占座检测记录的lastDetectedTime，让占座检测能够计算离开时长
+        // 用户暂离期间也会被占座检测监控
 
         return Result.success(true);
     }
@@ -450,9 +466,11 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         String originalStatus = reservation.getStatus();
         long nowTime = System.currentTimeMillis();
         long startTime = reservation.getStartTime().getTime();
+        long endTime = reservation.getEndTime().getTime();
         int bufferTime = configService.getIntValue("release_buffer_time", 15);
+        int minUsageTime = configService.getIntValue("min_usage_time", 30); // 最少使用时长（分钟）
 
-        // 检查退座规则：必须在起始时间 release_buffer_time 分钟前退座
+        // 检查退座规则1：未签到用户在起始时间 bufferTime 分钟内退座视为违约
         if ("reserved".equals(originalStatus)) {
             if (nowTime > startTime - (long) bufferTime * 60 * 1000) {
                 // 视为违约
@@ -478,6 +496,41 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
             }
         }
 
+        // 检查退座规则2：已签到用户使用时长不足视为违约
+        if ("checked_in".equals(originalStatus) || "away".equals(originalStatus)) {
+            // 计算实际使用时长（从签到时间到退座时间）
+            long actualUsageTime = (nowTime - startTime) / (1000 * 60); // 转换为分钟
+            
+            if (actualUsageTime < minUsageTime) {
+                // 视为违约 - 恶意占座（签到后立即退座）
+                reservation.setStatus("violation");
+                reservation.setEndTime(new Date());
+                this.updateById(reservation);
+
+                // 释放座位
+                Seat seat = seatService.getById(reservation.getSeatId());
+                if (seat != null) {
+                    seat.setStatus("available");
+                    seatService.updateById(seat);
+                    seatService.broadcastSeatUpdate(seat.getId(), "available");
+                }
+
+                // 扣除信用分 (-10)
+                userDetailsService.deductCreditScore(userId, 10);
+
+                // 发送通知
+                notificationService.send(userId, "退座违约扣分", "由于您使用座位时长不足" + minUsageTime + "分钟，已被视为恶意占座并扣除信用分。", "error");
+                
+                // 记录日志
+                SysUser user = userDetailsService.getById(userId);
+                if (user != null && seat != null) {
+                    sysLogService.log(user.getUsername(), "恶意占座违约", "座位号: " + seat.getSeatNo() + ", 使用时长: " + actualUsageTime + "分钟");
+                }
+                
+                return Result.success(true);
+            }
+        }
+
         // 更新预约状态
         reservation.setStatus("completed");
         reservation.setEndTime(new Date()); // Actual end time
@@ -492,7 +545,7 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         }
 
         // 履约奖励: +2 信用分 (仅限已签到并正常结束的情况)
-        if ("checked_in".equals(originalStatus)) {
+        if ("checked_in".equals(originalStatus) || "away".equals(originalStatus)) {
             userDetailsService.addCreditScore(userId, 2);
         }
 
@@ -505,7 +558,7 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         SysUser user = userDetailsService.getById(userId);
         if (user != null && seat != null) {
             String op = "取消预约";
-            if ("checked_in".equals(reservation.getStatus()) || "away".equals(reservation.getStatus())) {
+            if ("checked_in".equals(originalStatus) || "away".equals(originalStatus)) {
                 op = "释放座位";
             }
             sysLogService.log(user.getUsername(), op, "座位号: " + seat.getSeatNo());
@@ -787,5 +840,52 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         // 如果返还分数应该等于当时扣除的分数
         // 这里简化处理，返回默认值
         return baseAmount;
+    }
+
+    /**
+     * 统一在场确认入口（优化版）
+     * 所有用户在场行为都调用此方法
+     * 
+     * @param reservationId 预约ID
+     * @param type 在场确认类型
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void confirmPresence(Long reservationId, com.library.seat.modules.reservation.enums.PresenceType type) {
+        Reservation res = this.getById(reservationId);
+        if (res == null) return;
+
+        Date now = new Date();
+
+        // 累加本次离开时长到总离开时长（用于统计用户行为）
+        if (res.getLastPresentTime() != null) {
+            long awayMillis = now.getTime() - res.getLastPresentTime().getTime();
+            int awayMinutes = (int) (awayMillis / (1000 * 60));
+            if (awayMinutes > 0) {
+                Integer totalAway = res.getTotalAwayMinutes();
+                if (totalAway == null) totalAway = 0;
+                res.setTotalAwayMinutes(totalAway + awayMinutes);
+            }
+        }
+
+        // 更新在场时间
+        res.setLastPresentTime(now);
+        
+        // 重置预警状态（用户已确认在场，清除之前的预警标记）
+        res.setOccupancyAlertSent(0);
+
+        this.updateById(res);
+
+        // 记录在场事件日志
+        log.info("Presence confirmed: reservationId={}, type={}, userId={}", 
+                reservationId, type, res.getUserId());
+    }
+
+    /**
+     * 更新用户在场时间（兼容旧方法）
+     * 在用户签到、暂离返回、扫码等操作时调用
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updatePresence(Long reservationId) {
+        confirmPresence(reservationId, com.library.seat.modules.reservation.enums.PresenceType.CHECK_IN);
     }
 }

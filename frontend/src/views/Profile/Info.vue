@@ -53,7 +53,7 @@
               </a-col>
               <a-col :span="12">
                 <a-form-item label="手机号" name="phone">
-                  <a-input v-model:value="formState.phone" placeholder="请输入手机号" :disabled="!isNewUser" />
+                  <a-input v-model:value="formState.phone" placeholder="请输入手机号" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -109,7 +109,7 @@ const handleFinish = async (values: any) => {
     const updatedInfo = {
       realName: values.realName,
       studentId: values.studentId,
-      phone: userInfo.value?.phone || '', // 手机号已在注册时绑定，保持不变
+      phone: values.phone || userInfo.value?.phone || '', // 使用表单中的手机号
       username: userInfo.value?.username // 保持登录账号不变
     }
 

@@ -137,7 +137,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import {
   MonitorOutlined,
   ReloadOutlined,

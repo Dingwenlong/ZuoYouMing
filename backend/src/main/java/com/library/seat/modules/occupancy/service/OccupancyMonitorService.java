@@ -22,12 +22,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
+/**
+ * 占座检测服务（简化版）
+ * 使用 sys_reservation 表的 last_present_time 字段替代独立的占座检测表
+ */
 @Service
 public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, SeatOccupancy> {
 
     private static final Logger log = LoggerFactory.getLogger(OccupancyMonitorService.class);
 
     @Autowired
+    @org.springframework.context.annotation.Lazy
     private ReservationService reservationService;
 
     @Autowired
@@ -49,43 +54,9 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
     private SimpMessagingTemplate messagingTemplate;
 
     /**
-     * 创建占座检测记录（用户签到时调用）
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void createOccupancyRecord(Long reservationId, Long userId, Long seatId) {
-        SeatOccupancy record = new SeatOccupancy();
-        record.setReservationId(reservationId);
-        record.setUserId(userId);
-        record.setSeatId(seatId);
-        record.setCheckInTime(new Date());
-        record.setLastDetectedTime(new Date());
-        record.setTotalAwayMinutes(0);
-        record.setOccupancyStatus("normal");
-        record.setWarningCount(0);
-        this.save(record);
-        log.info("Created occupancy record for reservation: {}", reservationId);
-    }
-
-    /**
-     * 更新检测时间（用户活跃时调用，如扫码签到、暂离返回等）
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void updateLastDetectedTime(Long reservationId) {
-        SeatOccupancy record = this.baseMapper.selectByReservationId(reservationId);
-        if (record != null) {
-            record.setLastDetectedTime(new Date());
-            // 重置离开时长
-            record.setTotalAwayMinutes(0);
-            // 如果状态是warning，恢复为normal
-            if ("warning".equals(record.getOccupancyStatus())) {
-                record.setOccupancyStatus("normal");
-            }
-            this.updateById(record);
-        }
-    }
-
-    /**
-     * 执行占座检测
+     * 执行占座检测（优化版 - 滑动窗口计算）
+     * 直接使用 sys_reservation 表的 last_present_time 字段
+     * 使用滑动窗口计算当前离开时长，而非累加
      */
     @Transactional(rollbackFor = Exception.class)
     public void performOccupancyCheck() {
@@ -93,13 +64,13 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
 
         int occupancyThreshold = configService.getIntValue("occupancy_threshold", 60);
         int warningTime = configService.getIntValue("occupancy_warning_time", 45);
-
         Date now = new Date();
 
-        // 获取所有 checked_in 状态的预约
+        // 获取所有 checked_in 和 away 状态的预约
         List<Reservation> activeReservations = reservationService.list(
                 new LambdaQueryWrapper<Reservation>()
-                        .eq(Reservation::getStatus, "checked_in")
+                        .in(Reservation::getStatus, "checked_in", "away")
+                        .isNotNull(Reservation::getLastPresentTime)
         );
 
         for (Reservation reservation : activeReservations) {
@@ -113,44 +84,33 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
         log.info("Occupancy check completed. Checked {} reservations.", activeReservations.size());
     }
 
-    private void checkSingleReservation(Reservation reservation, Date now, 
+    /**
+     * 检查单个预约的占座状态（优化版 - 滑动窗口）
+     */
+    private void checkSingleReservation(Reservation reservation, Date now,
                                        int occupancyThreshold, int warningTime) {
-        Long reservationId = reservation.getId();
-        SeatOccupancy record = this.baseMapper.selectByReservationId(reservationId);
-
-        if (record == null) {
-            // 如果没有记录，创建一个
-            createOccupancyRecord(reservationId, reservation.getUserId(), reservation.getSeatId());
-            return;
-        }
-
-        // 计算离开时长（分钟）
-        long awayMillis = now.getTime() - record.getLastDetectedTime().getTime();
+        // 滑动窗口计算：当前时间 - 最后在场时间
+        long awayMillis = now.getTime() - reservation.getLastPresentTime().getTime();
         int awayMinutes = (int) (awayMillis / (1000 * 60));
 
-        record.setTotalAwayMinutes(awayMinutes);
-
-        String currentStatus = record.getOccupancyStatus();
+        Integer alertSent = reservation.getOccupancyAlertSent();
+        if (alertSent == null) alertSent = 0;
 
         if (awayMinutes >= occupancyThreshold) {
             // 占座判定 - 执行自动签退
-            handleOccupancyViolation(record, reservation);
-        } else if (awayMinutes >= warningTime && !"warning".equals(currentStatus)) {
+            handleOccupancyViolation(reservation, awayMinutes);
+        } else if (awayMinutes >= warningTime && alertSent == 0) {
             // 发送预警
-            handleOccupancyWarning(record, reservation, awayMinutes, occupancyThreshold);
+            handleOccupancyWarning(reservation, awayMinutes, occupancyThreshold);
+            reservation.setOccupancyAlertSent(1);
+            reservationService.updateById(reservation);
         }
-
-        this.updateById(record);
     }
 
     /**
      * 处理占座预警
      */
-    private void handleOccupancyWarning(SeatOccupancy record, Reservation reservation, 
-                                       int awayMinutes, int threshold) {
-        record.setOccupancyStatus("warning");
-        record.setWarningCount(record.getWarningCount() + 1);
-
+    private void handleOccupancyWarning(Reservation reservation, int awayMinutes, int threshold) {
         Long userId = reservation.getUserId();
         Seat seat = seatService.getById(reservation.getSeatId());
         String seatNo = seat != null ? seat.getSeatNo() : "未知座位";
@@ -162,7 +122,7 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
         warningMsg.put("seatNo", seatNo);
         warningMsg.put("awayMinutes", awayMinutes);
         warningMsg.put("threshold", threshold);
-        warningMsg.put("message", String.format("您已离开座位%d分钟，超过%d分钟将被视为占座并自动签退，请尽快返回！", 
+        warningMsg.put("message", String.format("您已离开座位%d分钟，超过%d分钟将被视为占座并自动签退，请尽快返回！",
                 awayMinutes, threshold));
 
         messagingTemplate.convertAndSendToUser(
@@ -172,8 +132,8 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
         );
 
         // 发送系统通知
-        notificationService.send(userId, "占座预警", 
-                String.format("您预约的座位%s已离开%d分钟，请尽快返回，否则将被自动签退并扣分。", 
+        notificationService.send(userId, "占座预警",
+                String.format("您预约的座位%s已离开%d分钟，请尽快返回，否则将被自动签退并扣分。",
                         seatNo, awayMinutes), "warning");
 
         log.info("Occupancy warning sent to user {} for reservation {}", userId, reservation.getId());
@@ -183,9 +143,7 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
      * 处理占座违规 - 自动签退
      */
     @Transactional(rollbackFor = Exception.class)
-    public void handleOccupancyViolation(SeatOccupancy record, Reservation reservation) {
-        record.setOccupancyStatus("occupied");
-
+    public void handleOccupancyViolation(Reservation reservation, int awayMinutes) {
         Long userId = reservation.getUserId();
         Long seatId = reservation.getSeatId();
         Seat seat = seatService.getById(seatId);
@@ -225,49 +183,59 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
         reservationService.broadcastReservationUpdate(userId, "reservation_ended", "occupancy_violation");
 
         // 6. 发送系统通知
-        notificationService.send(userId, "占座违规自动签退", 
-                String.format("由于您长时间离开座位%s（超过占座阈值），系统已自动签退并扣除%d信用分。", 
+        notificationService.send(userId, "占座违规自动签退",
+                String.format("由于您长时间离开座位%s（超过占座阈值），系统已自动签退并扣除%d信用分。",
                         seatNo, creditDeduct), "error");
 
         // 7. 记录日志
         SysUser user = userDetailsService.getById(userId);
         if (user != null) {
-            sysLogService.log("system", "占座违规自动签退", 
-                    String.format("用户: %s, 座位: %s, 离开时长: %d分钟, 扣分: %d", 
-                            user.getUsername(), seatNo, record.getTotalAwayMinutes(), creditDeduct));
+            sysLogService.log("system", "占座违规自动签退",
+                    String.format("用户: %s, 座位: %s, 离开时长: %d分钟, 扣分: %d",
+                            user.getUsername(), seatNo, awayMinutes, creditDeduct));
         }
 
         log.info("Auto checkout executed for reservation {} due to occupancy violation", reservation.getId());
     }
 
     /**
-     * 获取实时监控数据
+     * 获取实时监控数据（简化版）
+     * 直接从 sys_reservation 表查询
      */
     public List<Map<String, Object>> getMonitoringData() {
-        List<SeatOccupancy> records = this.baseMapper.selectActiveMonitoringList();
-        List<Map<String, Object>> result = new ArrayList<>();
+        List<Reservation> reservations = reservationService.list(
+                new LambdaQueryWrapper<Reservation>()
+                        .in(Reservation::getStatus, "checked_in", "away")
+        );
 
-        for (SeatOccupancy record : records) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        Date now = new Date();
+
+        for (Reservation reservation : reservations) {
             Map<String, Object> item = new HashMap<>();
-            item.put("id", record.getId());
-            item.put("reservationId", record.getReservationId());
-            item.put("userId", record.getUserId());
-            item.put("seatId", record.getSeatId());
-            item.put("checkInTime", record.getCheckInTime());
-            item.put("lastDetectedTime", record.getLastDetectedTime());
-            item.put("totalAwayMinutes", record.getTotalAwayMinutes());
-            item.put("occupancyStatus", record.getOccupancyStatus());
-            item.put("warningCount", record.getWarningCount());
+            item.put("reservationId", reservation.getId());
+            item.put("userId", reservation.getUserId());
+            item.put("seatId", reservation.getSeatId());
+            item.put("checkInTime", reservation.getLastPresentTime());
+            item.put("totalAwayMinutes", reservation.getTotalAwayMinutes());
+
+            // 计算当前离开时长
+            if (reservation.getLastPresentTime() != null) {
+                long awayMillis = now.getTime() - reservation.getLastPresentTime().getTime();
+                item.put("currentAwayMinutes", (int) (awayMillis / (1000 * 60)));
+            } else {
+                item.put("currentAwayMinutes", 0);
+            }
 
             // 补充用户信息
-            SysUser user = userDetailsService.getById(record.getUserId());
+            SysUser user = userDetailsService.getById(reservation.getUserId());
             if (user != null) {
                 item.put("username", user.getUsername());
                 item.put("realName", user.getRealName());
             }
 
             // 补充座位信息
-            Seat seat = seatService.getById(record.getSeatId());
+            Seat seat = seatService.getById(reservation.getSeatId());
             if (seat != null) {
                 item.put("seatNo", seat.getSeatNo());
                 item.put("area", seat.getArea());
@@ -285,14 +253,8 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
     @Transactional(rollbackFor = Exception.class)
     public void manualCheckout(Long reservationId, String reason) {
         Reservation reservation = reservationService.getById(reservationId);
-        if (reservation == null || !"checked_in".equals(reservation.getStatus())) {
+        if (reservation == null || !("checked_in".equals(reservation.getStatus()) || "away".equals(reservation.getStatus()))) {
             throw new RuntimeException("预约记录不存在或状态不正确");
-        }
-
-        SeatOccupancy record = this.baseMapper.selectByReservationId(reservationId);
-        if (record != null) {
-            record.setOccupancyStatus("occupied");
-            this.updateById(record);
         }
 
         // 更新预约状态
@@ -310,7 +272,7 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
 
         // 发送通知
         reservationService.broadcastReservationUpdate(reservation.getUserId(), "reservation_ended", "manual_checkout");
-        notificationService.send(reservation.getUserId(), "座位已释放", 
+        notificationService.send(reservation.getUserId(), "座位已释放",
                 "您的座位已被管理员释放，原因：" + reason, "warning");
 
         log.info("Manual checkout executed for reservation {} by admin, reason: {}", reservationId, reason);
@@ -346,12 +308,12 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
 
                 // 发送通知
                 reservationService.broadcastReservationUpdate(reservation.getUserId(), "reservation_ended", "closing_time");
-                notificationService.send(reservation.getUserId(), "闭馆自动签退", 
+                notificationService.send(reservation.getUserId(), "闭馆自动签退",
                         "图书馆即将闭馆，您的座位已自动释放，欢迎下次光临！", "info");
 
                 log.info("Auto checkout at closing for reservation {}", reservation.getId());
             } catch (Exception e) {
-                log.error("Error processing closing checkout for reservation {}: {}", 
+                log.error("Error processing closing checkout for reservation {}: {}",
                         reservation.getId(), e.getMessage());
             }
         }
@@ -371,7 +333,7 @@ public class OccupancyMonitorService extends ServiceImpl<SeatOccupancyMapper, Se
         );
 
         for (Reservation reservation : activeReservations) {
-            notificationService.send(reservation.getUserId(), "闭馆提醒", 
+            notificationService.send(reservation.getUserId(), "闭馆提醒",
                     "图书馆将在30分钟后闭馆，请合理安排学习时间，及时带走个人物品。", "warning");
         }
 

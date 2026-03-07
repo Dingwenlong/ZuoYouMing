@@ -113,7 +113,17 @@ public class ReservationController {
     @Operation(summary = "管理员强制释放座位")
     @PostMapping("/{id}/force-release")
     public Result<Boolean> forceRelease(@PathVariable Long id) {
-        // In real app, check for admin role here or via Security Config
+        // 检查当前用户是否为管理员
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return Result.error("用户未登录或Token失效");
+        }
+        
+        SysUser user = userDetailsService.getById(userId);
+        if (user == null || (!"admin".equals(user.getRole()) && !"librarian".equals(user.getRole()))) {
+            return Result.error("无权操作，仅管理员或图书馆员可强制释放座位");
+        }
+        
         return reservationService.forceRelease(id);
     }
 
@@ -122,6 +132,17 @@ public class ReservationController {
     public Result<Boolean> reviewAppeal(
             @PathVariable Long id,
             @RequestBody Map<String, String> params) {
+        // 检查当前用户是否为管理员
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return Result.error("用户未登录或Token失效");
+        }
+        
+        SysUser user = userDetailsService.getById(userId);
+        if (user == null || (!"admin".equals(user.getRole()) && !"librarian".equals(user.getRole()))) {
+            return Result.error("无权操作，仅管理员或图书馆员可处理申诉");
+        }
+        
         // params: status (approved/rejected), reply
         String status = params.get("status");
         String reply = params.get("reply");

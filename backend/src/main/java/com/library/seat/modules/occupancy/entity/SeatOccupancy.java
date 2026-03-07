@@ -8,8 +8,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.Serializable;
 import java.util.Date;
 
+/**
+ * 占座检测记录实体（已弃用）
+ * 占座检测逻辑已迁移到 sys_reservation 表
+ * 保留此类以兼容历史数据，新代码不再使用
+ */
 @TableName("sys_seat_occupancy")
-@Schema(description = "占座检测记录")
+@Schema(description = "占座检测记录（已弃用，使用 sys_reservation 表替代）")
+@Deprecated
 public class SeatOccupancy implements Serializable {
     private static final long serialVersionUID = 1L;
 
