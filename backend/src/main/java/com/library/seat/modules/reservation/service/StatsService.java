@@ -1,6 +1,5 @@
 package com.library.seat.modules.reservation.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.library.seat.modules.reservation.entity.Reservation;
 import com.library.seat.modules.reservation.service.ReservationService;
 import com.library.seat.modules.seat.entity.Seat;
@@ -44,25 +43,38 @@ public class StatsService {
         stats.put("occupied", occupied);
         stats.put("maintenance", maintenance);
         
-        // 2. 今日预约人数 (去重)
         java.time.LocalDate today = java.time.LocalDate.now();
-        java.time.LocalDateTime startOfDay = today.atStartOfDay();
-        java.time.LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
-        
-        long todayCount = countDistinctUsers(startOfDay, endOfDay);
-        stats.put("todayReservations", todayCount);
-        
-        // 3. 趋势数据 (最近7天, 预约人数去重)
+        java.time.LocalDate rangeStart = today.minusDays(6);
+        java.util.Date startTime = java.util.Date.from(rangeStart.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+        java.util.Date endTime = java.util.Date.from(today.plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+
+        List<Reservation> recentReservations = reservationService.list(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Reservation>()
+                        .select(Reservation::getUserId, Reservation::getCreateTime)
+                        .ge(Reservation::getCreateTime, startTime)
+                        .lt(Reservation::getCreateTime, endTime)
+                        .eq(Reservation::getDeleted, 0));
+
+        Map<java.time.LocalDate, Set<Long>> distinctUsersByDay = new HashMap<>();
+        for (Reservation reservation : recentReservations) {
+            if (reservation.getUserId() == null || reservation.getCreateTime() == null) {
+                continue;
+            }
+            java.time.LocalDate day = reservation.getCreateTime()
+                    .toInstant()
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDate();
+            distinctUsersByDay.computeIfAbsent(day, key -> new HashSet<>()).add(reservation.getUserId());
+        }
+
+        stats.put("todayReservations", distinctUsersByDay.getOrDefault(today, Collections.emptySet()).size());
+
         List<String> dates = new ArrayList<>();
         List<Long> counts = new ArrayList<>();
         for (int i = 6; i >= 0; i--) {
             java.time.LocalDate d = today.minusDays(i);
             dates.add(d.toString());
-            
-            java.time.LocalDateTime s = d.atStartOfDay();
-            java.time.LocalDateTime e = d.plusDays(1).atStartOfDay();
-            long c = countDistinctUsers(s, e);
-            counts.add(c);
+            counts.add((long) distinctUsersByDay.getOrDefault(d, Collections.emptySet()).size());
         }
         
         Map<String, Object> trend = new HashMap<>();
@@ -71,19 +83,6 @@ public class StatsService {
         stats.put("trend", trend);
 
         return stats;
-    }
-
-    /**
-     * 统计指定时间范围内的预约人数 (按 user_id 去重)
-     */
-    private long countDistinctUsers(java.time.LocalDateTime start, java.time.LocalDateTime end) {
-        QueryWrapper<Reservation> wrapper = new QueryWrapper<>();
-        wrapper.select("count(distinct user_id) as count")
-                .ge("create_time", start)
-                .lt("create_time", end)
-                .eq("deleted", 0);
-        Map<String, Object> map = reservationService.getMap(wrapper);
-        return map != null && map.get("count") != null ? ((Number) map.get("count")).longValue() : 0L;
     }
 
     public Map<String, Object> getHeatmapDataWrapper(String dateStr, boolean simulate) {

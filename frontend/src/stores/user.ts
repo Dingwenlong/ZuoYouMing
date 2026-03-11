@@ -4,6 +4,16 @@ import { type LoginParams, type RegisterParams, type UserInfo, login, register, 
 import { getMenus, type MenuItem } from '../api/menu'
 import { getActiveReservation } from '../api/reservation'
 
+interface ReservationState {
+  id: number
+  seatId: number
+  seatNo: string
+  slot?: string
+  startTime: number
+  deadline: number | null
+  status: 'reserved' | 'checked_in' | 'away'
+}
+
 export const useUserStore = defineStore('user', () => {
   const token = ref<string>(localStorage.getItem('token') || '')
   // 从 localStorage 恢复 userInfo，防止刷新丢失
@@ -13,6 +23,8 @@ export const useUserStore = defineStore('user', () => {
       : null
   )
   const menus = ref<MenuItem[]>([])
+  const isSessionInitialized = ref(false)
+  let sessionInitPromise: Promise<void> | null = null
   
   // 是否绑定了个人信息
   const isInfoBound = computed(() => {
@@ -35,49 +47,62 @@ export const useUserStore = defineStore('user', () => {
   }
 
   // 预约状态管理
-  const reservation = ref<{
-    id: number
-    seatId: number
-    seatNo: string
-    startTime: number // 开始时间戳
-    deadline: number // 截止时间戳
-    status: 'reserved' | 'checked_in' | 'away'
-  } | null>(
+  const reservation = ref<ReservationState | null>(
     localStorage.getItem('reservation') 
       ? JSON.parse(localStorage.getItem('reservation')!) 
       : null
   )
 
-  function setReservation(id: number, seatId: number, seatNo: string, startTime: number, deadline: number) {
-    const data = { id, seatId, seatNo, startTime, deadline, status: 'reserved' as const }
+  function persistReservation(data: ReservationState | null) {
     reservation.value = data
-    localStorage.setItem('reservation', JSON.stringify(data))
+    if (data) {
+      localStorage.setItem('reservation', JSON.stringify(data))
+    } else {
+      localStorage.removeItem('reservation')
+    }
+  }
+
+  function resetSessionInitialization() {
+    isSessionInitialized.value = false
+    sessionInitPromise = null
+  }
+
+  function setReservation(
+    id: number,
+    seatId: number,
+    seatNo: string,
+    startTime: number,
+    deadline: number | null,
+    status: ReservationState['status'] = 'reserved',
+    slot?: string
+  ) {
+    const data = { id, seatId, seatNo, startTime, deadline, status, slot }
+    reservation.value = data
+    persistReservation(data)
   }
 
   function setAway() {
     if (!reservation.value) return
     const deadline = Date.now() + 30 * 60 * 1000 // 30分钟暂离时间
     const data = { ...reservation.value, deadline, status: 'away' as const }
-    reservation.value = data
-    localStorage.setItem('reservation', JSON.stringify(data))
+    persistReservation(data)
   }
 
   function checkIn() {
     if (!reservation.value) return
-    const data = { ...reservation.value, status: 'checked_in' as const }
-    reservation.value = data
-    localStorage.setItem('reservation', JSON.stringify(data))
+    const data = { ...reservation.value, deadline: null, status: 'checked_in' as const }
+    persistReservation(data)
   }
 
   function clearReservation() {
-    reservation.value = null
-    localStorage.removeItem('reservation')
+    persistReservation(null)
   }
 
   function clearToken() {
     token.value = ''
     userInfo.value = null
     menus.value = []
+    resetSessionInitialization()
     clearReservation() // 登出时清除预约
     localStorage.removeItem('token')
     localStorage.removeItem('userInfo')
@@ -89,9 +114,7 @@ export const useUserStore = defineStore('user', () => {
       
       setToken(res.token)
       setUserInfo(res.userInfo)
-      
-      // 登录成功后获取菜单
-      await fetchMenus()
+      resetSessionInitialization()
       
       return true
     } catch (error) {
@@ -106,8 +129,7 @@ export const useUserStore = defineStore('user', () => {
       
       setToken(res.token)
       setUserInfo(res.userInfo)
-      
-      await fetchMenus()
+      resetSessionInitialization()
       
       return true
     } catch (error) {
@@ -122,8 +144,7 @@ export const useUserStore = defineStore('user', () => {
       
       setToken(res.token)
       setUserInfo(res.userInfo)
-      
-      await fetchMenus()
+      resetSessionInitialization()
       
       return true
     } catch (error) {
@@ -139,7 +160,7 @@ export const useUserStore = defineStore('user', () => {
       
       setToken(res.token)
       setUserInfo(res.userInfo)
-      await fetchMenus()
+      resetSessionInitialization()
       
       return true
     } catch (error) {
@@ -172,25 +193,62 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  async function initializeSession() {
+    if (!token.value || !userInfo.value) {
+      resetSessionInitialization()
+      return
+    }
+
+    if (isSessionInitialized.value) {
+      return
+    }
+
+    if (sessionInitPromise) {
+      return sessionInitPromise
+    }
+
+    sessionInitPromise = (async () => {
+      try {
+        if (menus.value.length === 0) {
+          await fetchMenus()
+        }
+
+        if (userInfo.value?.role === 'guest') {
+          clearReservation()
+        } else {
+          await syncReservationStatus()
+        }
+      } finally {
+        isSessionInitialized.value = true
+        sessionInitPromise = null
+      }
+    })()
+
+    return sessionInitPromise
+  }
+
   async function syncReservationStatus() {
+    if (!token.value || !userInfo.value || userInfo.value.role === 'guest') {
+      clearReservation()
+      return
+    }
+
     try {
-      const res = await getActiveReservation()
-      const activeRes = (res as any).data
+      const activeRes = await getActiveReservation()
       
       if (activeRes) {
         // 同步后端状态到本地
-        const deadline = activeRes.deadline ? new Date(activeRes.deadline).getTime() : Date.now() + 15 * 60 * 1000
+        const deadline = activeRes.deadline ? new Date(activeRes.deadline).getTime() : null
         const startTime = activeRes.startTime ? new Date(activeRes.startTime).getTime() : Date.now()
-        const data = {
-          id: activeRes.id,
-          seatId: activeRes.seatId,
-          seatNo: activeRes.seatNo || '',
-          startTime: startTime,
-          deadline: deadline,
-          status: activeRes.status as any
-        }
-        reservation.value = data
-        localStorage.setItem('reservation', JSON.stringify(data))
+        setReservation(
+          activeRes.id,
+          activeRes.seatId,
+          activeRes.seatNo || '',
+          startTime,
+          deadline,
+          activeRes.status as ReservationState['status'],
+          activeRes.slot
+        )
       } else {
         // 如果后端没有活跃预约，清理本地缓存
         clearReservation()
@@ -218,6 +276,7 @@ export const useUserStore = defineStore('user', () => {
     completeBinding,
     handleLogout,
     fetchMenus,
+    initializeSession,
     syncReservationStatus
   }
 })

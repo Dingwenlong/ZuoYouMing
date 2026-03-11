@@ -317,10 +317,7 @@ onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   
-  // 确保菜单已加载
-  if (userStore.menus.length === 0) {
-    await userStore.fetchMenus()
-  }
+  await userStore.initializeSession()
 
   // 监听告警
   wsService.connect()

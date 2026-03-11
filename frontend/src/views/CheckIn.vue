@@ -216,12 +216,16 @@ const generatedQrText = computed(() => {
 })
 
 onMounted(async () => {
-  try {
-    const data = await getSeats()
-    allSeats.value = data as any
-  } catch (e) {
-    console.error('Failed to fetch seats', e)
+  if (isAdmin.value) {
+    try {
+      const data = await getSeats()
+      allSeats.value = data as any
+    } catch (e) {
+      console.error('Failed to fetch seats', e)
+    }
   }
+
+  getLocation()
 })
 
 watch(selectedArea, () => {
@@ -299,7 +303,7 @@ const getLocation = () => {
       coords.value = position.coords
       locating.value = false
       gpsStatus.value = 'success'
-      gpsMessage.value = '定位成功，已在图书馆范围内'
+      gpsMessage.value = '已获取定位，待服务端校验'
     },
     (error) => {
       locating.value = false

@@ -14,6 +14,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class SeatService extends ServiceImpl<SeatMapper, Seat> {
@@ -144,10 +146,21 @@ public class SeatService extends ServiceImpl<SeatMapper, Seat> {
         List<Seat> seats = this.list(queryWrapper);
         if (seats.isEmpty()) return seats;
 
-        // 获取今天的所有活跃预约
+        List<Long> seatIds = seats.stream()
+                .map(Seat::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.util.Date startOfDay = java.util.Date.from(today.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+        java.util.Date endOfDay = java.util.Date.from(today.plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant());
+
         List<com.library.seat.modules.reservation.entity.Reservation> reservations = reservationService.list(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.library.seat.modules.reservation.entity.Reservation>()
+                .in(com.library.seat.modules.reservation.entity.Reservation::getSeatId, seatIds)
                 .in(com.library.seat.modules.reservation.entity.Reservation::getStatus, "reserved", "checked_in", "away")
+                .ge(com.library.seat.modules.reservation.entity.Reservation::getStartTime, startOfDay)
+                .lt(com.library.seat.modules.reservation.entity.Reservation::getStartTime, endOfDay)
                 .eq(com.library.seat.modules.reservation.entity.Reservation::getDeleted, 0));
 
         // 建立 座位ID -> 时段 -> 状态 的映射
