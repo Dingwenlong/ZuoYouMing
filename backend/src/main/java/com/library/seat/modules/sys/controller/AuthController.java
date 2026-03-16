@@ -82,6 +82,39 @@ public class AuthController {
         return Result.success("Logged out successfully");
     }
 
+    @Operation(summary = "访客登录")
+    @PostMapping("/guest-login")
+    public Result<Map<String, Object>> guestLogin() {
+        SysUser guestUser = userDetailsService.getOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getUsername, "guest"));
+
+        if (guestUser == null) {
+            guestUser = new SysUser();
+            guestUser.setUsername("guest");
+            guestUser.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+            guestUser.setRealName("访客用户");
+            guestUser.setRole("guest");
+            guestUser.setStatus("active");
+            guestUser.setCreditScore(100);
+            guestUser.setAvatar("https://api.dicebear.com/9.x/icons/svg?seed=guest");
+            guestUser.setCreateTime(new java.util.Date());
+            guestUser.setDeleted(0);
+            userDetailsService.save(guestUser);
+        }
+
+        UserDetails userDetails = userDetailsService.loadUserByUsername(guestUser.getUsername());
+        String token = jwtUtils.generateToken(userDetails);
+
+        guestUser.setLastLoginTime(new java.util.Date());
+        userDetailsService.updateById(guestUser);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("token", token);
+        data.put("userInfo", guestUser);
+
+        return Result.success(data);
+    }
+
     @Operation(summary = "获取当前用户信息")
     @GetMapping("/info")
     public Result<SysUser> info() {

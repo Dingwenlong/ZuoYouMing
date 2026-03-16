@@ -14,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
@@ -28,6 +29,9 @@ public class SecurityConfig {
 
     @Autowired
     private UnauthEntryPoint unauthEntryPoint;
+
+    @Autowired
+    private RestAccessDeniedHandler restAccessDeniedHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -48,10 +52,21 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**", "/ws/**").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/doc.html", "/webjars/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/menus").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/seats/all").hasAuthority("admin")
+                .requestMatchers(HttpMethod.POST, "/api/v1/messages/system-notification").hasAuthority("admin")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/configs").hasAnyAuthority("admin", "librarian")
+                .requestMatchers("/api/v1/users/**").hasAuthority("admin")
+                .requestMatchers(HttpMethod.POST, "/api/v1/seats/**").hasAnyAuthority("admin", "librarian")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/seats/**").hasAnyAuthority("admin", "librarian")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/seats/**").hasAnyAuthority("admin", "librarian")
+                .requestMatchers(HttpMethod.POST, "/api/v1/reservations/*/force-release").hasAnyAuthority("admin", "librarian")
+                .requestMatchers(HttpMethod.POST, "/api/v1/reservations/appeals/*/review").hasAnyAuthority("admin", "librarian")
                 .anyRequest().authenticated()
             )
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint(unauthEntryPoint)
+                .accessDeniedHandler(restAccessDeniedHandler)
             );
 
         http.addFilterBefore(jwtAuthenticationTokenFilter, UsernamePasswordAuthenticationFilter.class);

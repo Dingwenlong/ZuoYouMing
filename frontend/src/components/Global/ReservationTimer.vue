@@ -1,12 +1,12 @@
 <template>
-  <div v-if="timeLeft > 0" class="timer-container" :class="{ 'mobile': isMobile, 'away': reservation?.status === 'away' }">
+  <div v-if="reservation" class="timer-container" :class="{ 'mobile': isMobile, 'away': reservation?.status === 'away' }">
     <a-popover placement="bottomRight" trigger="click">
       <template #content>
         <div class="timer-actions">
-          <a-button type="primary" size="small" @click="handleCheckIn" v-if="reservation?.status === 'reserved'">
-            签到
+          <a-button type="primary" size="small" @click="handleCheckIn" v-if="reservation?.status === 'reserved' || reservation?.status === 'away'">
+            {{ reservation?.status === 'away' ? '返回签到' : '去签到' }}
           </a-button>
-          <a-button size="small" @click="handleLeave" v-if="reservation?.status !== 'away'">
+          <a-button size="small" @click="handleLeave" v-if="reservation?.status === 'checked_in'">
             暂离
           </a-button>
           <a-button danger size="small" @click="handleRelease">
@@ -19,9 +19,10 @@
         <span class="seat-info" v-if="!isMobile">
           {{ reservation?.seatNo }}
           <span v-if="reservation?.status === 'away'">(暂离)</span>
+          <span v-else-if="reservation?.status === 'checked_in'">(使用中)</span>
         </span>
         <span class="time-text">
-          {{ formatTime(timeLeft) }}
+          {{ displayText }}
         </span>
       </div>
     </a-popover>
@@ -33,9 +34,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ClockCircleOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '../../stores/user'
 import { message, Modal } from 'ant-design-vue'
-import { checkIn, temporaryLeave, releaseSeat } from '../../api/reservation'
+import { useRouter } from 'vue-router'
+import { temporaryLeave, releaseSeat } from '../../api/reservation'
 
 const userStore = useUserStore()
+const router = useRouter()
 const reservation = computed(() => userStore.reservation)
 const timeLeft = ref(0)
 const isMobile = ref(false)
@@ -53,8 +56,22 @@ const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768
 }
 
+const displayText = computed(() => {
+  if (!reservation.value) return ''
+  if (reservation.value.deadline !== null && timeLeft.value > 0) {
+    return formatTime(timeLeft.value)
+  }
+  if (reservation.value.status === 'checked_in') {
+    return '使用中'
+  }
+  if (reservation.value.status === 'away') {
+    return '暂离中'
+  }
+  return '待签到'
+})
+
 const updateTimer = () => {
-  if (!reservation.value) {
+  if (!reservation.value || reservation.value.deadline === null) {
     timeLeft.value = 0
     return
   }
@@ -73,16 +90,7 @@ const updateTimer = () => {
 
 const handleCheckIn = async () => {
   if (!reservation.value?.id) return
-  loading.value = true
-  try {
-    await checkIn(reservation.value.id, {})
-    userStore.checkIn()
-    message.success('签到成功')
-  } catch (e) {
-    // message.error('签到失败') // Interceptor already handles error
-  } finally {
-    loading.value = false
-  }
+  router.push('/checkin')
 }
 
 const handleLeave = async () => {

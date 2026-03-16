@@ -121,23 +121,31 @@ const stats = ref({
   }
 })
 
+const handleStatsUpdate = (newStats: any) => {
+  stats.value = newStats
+}
+
 onMounted(async () => {
-  try {
-    const data = await getDashboardStats()
-    stats.value = (data as any).data || data
-    await fetchActivities()
-    
-    // 监听实时统计更新
-    wsService.on('stats_update', (newStats: any) => {
-      stats.value = newStats
-    })
-  } catch (error) {
-    console.error(error)
+  const [statsResult, activitiesResult] = await Promise.allSettled([
+    getDashboardStats(),
+    fetchActivities()
+  ])
+
+  if (statsResult.status === 'fulfilled') {
+    stats.value = statsResult.value as typeof stats.value
+  } else {
+    console.error(statsResult.reason)
   }
+
+  if (activitiesResult.status === 'fulfilled') {
+    activities.value = activitiesResult.value
+  }
+
+  wsService.on('stats_update', handleStatsUpdate)
 })
 
 onUnmounted(() => {
-  wsService.off('stats_update', () => {})
+  wsService.off('stats_update', handleStatsUpdate)
 })
 
 const usageChartOption = computed(() => ({
@@ -226,13 +234,12 @@ const activities = ref<any[]>([])
 
 const fetchActivities = async () => {
   try {
-    const res = await request<any>({
+    const data = await request<any>({
       url: '/logs/list',
       method: 'get',
       params: { page: 1, size: 5 }
     })
-    const data = res.data || res
-    activities.value = data.records.map((log: any) => {
+    return (data.records || []).map((log: any) => {
       let icon = HistoryOutlined
       let color = '#108ee9'
       
@@ -260,7 +267,9 @@ const fetchActivities = async () => {
         color
       }
     })
-  } catch (e) {}
+  } catch (_error) {
+    return []
+  }
 }
 </script>
 

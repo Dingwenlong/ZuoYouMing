@@ -6,6 +6,7 @@ export interface Seat {
   area: string
   status: 'available' | 'occupied' | 'maintenance'
   type: string
+  slotStatuses?: Record<string, string>
   x?: number
   y?: number
 }
@@ -18,9 +19,14 @@ const mockSeats = Array.from({ length: 24 }, (_, i) => ({
   seatNo: `${String.fromCharCode(65 + Math.floor(i / 6))}-${(i % 6) + 1}`,
   area: 'A区',
   status: Math.random() > 0.7 ? 'occupied' : Math.random() > 0.9 ? 'maintenance' : 'available',
-  type: '标准座',
+  type: '标准',
   x: 100 + (i % 6) * 100,
-  y: 100 + Math.floor(i / 6) * 80
+  y: 100 + Math.floor(i / 6) * 80,
+  slotStatuses: {
+    morning: 'available',
+    afternoon: 'available',
+    evening: 'available'
+  }
 }))
 
 export function getSeats(params?: { area?: string }) {

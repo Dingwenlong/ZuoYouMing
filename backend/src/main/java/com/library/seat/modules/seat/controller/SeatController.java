@@ -76,7 +76,7 @@ public class SeatController {
             sysLogService.log(getCurrentUsername(), "修改座位", detail);
             
             // 如果座位从 occupied 变为其他状态，清理预约
-            if (oldSeat != null && "occupied".equals(oldSeat.getStatus()) && !"occupied".equals(seat.getStatus())) {
+            if (oldSeat != null && seat.getStatus() != null && !"occupied".equals(seat.getStatus()) && !seat.getStatus().equals(oldSeat.getStatus())) {
                 reservationService.terminateActiveReservationBySeat(seat.getId(), "admin_force_release");
             }
             
@@ -161,9 +161,10 @@ public class SeatController {
              sysLogService.log(getCurrentUsername(), "修改座位状态", 
                      String.format("ID: %d, %s -> %s", id, oldStatus, status));
              
-             // 如果从 occupied 变为其他状态，清理活跃预约
-             if ("occupied".equals(oldStatus) && !"occupied".equals(status)) {
-                 reservationService.terminateActiveReservationBySeat(id, "admin_force_release");
+             // 强制释放或设为故障时，结束该座位的所有活跃预约。
+             if (!"occupied".equals(status)) {
+                 String reason = "maintenance".equals(status) ? "admin_mark_maintenance" : "admin_force_release";
+                 reservationService.terminateActiveReservationBySeat(id, reason);
              }
              
              seatService.broadcastSeatUpdate(id, status);

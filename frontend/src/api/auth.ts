@@ -152,19 +152,24 @@ export function register(data: RegisterParams) {
 }
 
 export function guestLogin() {
-  // 访客登录始终使用前端模拟数据，不调用后端接口
-  return new Promise<LoginResult>((resolve) => {
-    setTimeout(() => {
-      resolve({
-        token: 'guest-token-' + Date.now(),
-        userInfo: {
-          id: 0,
-          username: 'guest',
-          role: 'guest',
-          avatar: 'https://api.dicebear.com/9.x/icons/svg?seed=guest'
-        }
-      })
-    }, 500)
+  if (USE_MOCK) {
+    return new Promise<LoginResult>((resolve) => {
+      setTimeout(() => {
+        resolve({
+          token: 'guest-token-' + Date.now(),
+          userInfo: {
+            id: 0,
+            username: 'guest',
+            role: 'guest',
+            avatar: 'https://api.dicebear.com/9.x/icons/svg?seed=guest'
+          }
+        })
+      }, 500)
+    })
+  }
+  return request<LoginResult>({
+    url: '/auth/guest-login',
+    method: 'post'
   })
 }
 

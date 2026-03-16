@@ -220,7 +220,6 @@ const getStatusText = (status?: string) => {
 }
 
 const handleSeatClick = (seat: Seat) => {
-  if (seat.status !== 'available') return
   selectedSeatId.value = seat.id
   emit('select', seat)
 }
