@@ -11,7 +11,7 @@
         <div class="branding-content">
           <div class="brand-header">
             <div class="logo-container">
-              <img src="/vite.svg" alt="logo" class="brand-logo" />
+              <img src="/logo.png" alt="logo" class="brand-logo" />
             </div>
             <h1 class="brand-title">图书馆座位预约与占座监督系统</h1>
           </div>

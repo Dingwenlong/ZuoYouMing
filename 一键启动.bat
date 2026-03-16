@@ -132,6 +132,20 @@ echo [OK] Frontend dependencies installed
 
 echo.
 echo =========================================
+echo   Starting services...
+echo =========================================
+echo.
+
+REM Start backend in new window
+echo Starting backend server...
+start "Library Seat System - Backend" cmd /k "cd /d "%~dp0backend" && mvn spring-boot:run"
+
+REM Start frontend in new window
+echo Starting frontend server...
+start "Library Seat System - Frontend" cmd /k "cd /d "%~dp0frontend" && (pnpm dev 2>nul || npm run dev)"
+
+echo.
+echo =========================================
 echo   SETUP COMPLETE!
 echo =========================================
 echo.
@@ -141,9 +155,7 @@ echo   - Backend API: http://localhost:8080
 echo   - Swagger Docs: http://localhost:8080/swagger-ui.html
 echo   - EMQX Dashboard: http://localhost:18083
 echo.
-echo Next Steps:
-echo   1. Open a new terminal, go to backend folder, run: mvn spring-boot:run
-echo   2. Open another terminal, go to frontend folder, run: pnpm dev (or npm run dev)
+echo Backend and Frontend servers are starting in separate windows.
 echo.
 echo =========================================
 echo.

@@ -13,7 +13,7 @@
     >
       <div class="logo-container" :class="{ collapsed }">
         <div class="logo-box">
-          <img src="/vite.svg" alt="logo" />
+          <img src="/logo.png" alt="logo" />
         </div>
         <h1 v-show="!collapsed" class="logo-text">座位预约与占座监督</h1>
       </div>
@@ -44,7 +44,7 @@
     >
       <div class="logo-container">
         <div class="logo-box">
-          <img src="/vite.svg" alt="logo" />
+          <img src="/logo.png" alt="logo" />
         </div>
         <h1 class="logo-text">座位预约与占座监督</h1>
       </div>
