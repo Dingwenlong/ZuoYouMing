@@ -50,6 +50,12 @@ const routes: Array<RouteRecordRaw> = [
             name: 'ProfileHistory',
             component: () => import('../views/Profile/History.vue'),
             meta: { title: '预约记录', roles: ['student', 'librarian', 'admin'] }
+          },
+          {
+            path: 'appeal',
+            name: 'ProfileAppeal',
+            component: () => import('../views/Profile/Appeal.vue'),
+            meta: { title: '违规申诉', roles: ['student', 'librarian', 'admin'] }
           }
         ]
       },
@@ -88,6 +94,18 @@ const routes: Array<RouteRecordRaw> = [
             name: 'SystemConfig',
             component: () => import('../views/System/Config.vue'),
             meta: { title: '系统配置', roles: ['admin'] }
+          },
+          {
+            path: 'occupancy',
+            name: 'SystemOccupancy',
+            component: () => import('../views/System/OccupancyMonitor.vue'),
+            meta: { title: '占座监控', roles: ['admin', 'librarian'] }
+          },
+          {
+            path: 'appeal',
+            name: 'SystemAppeal',
+            component: () => import('../views/System/AppealManage.vue'),
+            meta: { title: '申诉审核', roles: ['admin', 'librarian'] }
           }
         ]
       }

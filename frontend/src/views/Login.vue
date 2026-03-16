@@ -128,7 +128,7 @@
             @finish="handleRegisterSubmit"
             :rules="registerRules"
             layout="vertical"
-            class="modern-form"
+            class="modern-form register-form-compact"
           >
             <a-form-item name="username" class="form-item">
               <template #label>
@@ -587,12 +587,35 @@ const fillAccount = (role: string) => {
   display: flex;
   width: 1000px;
   max-width: 100%;
-  height: 700px;
+  min-height: 600px;
+  max-height: 90vh;
   background: #ffffff;
   border-radius: 24px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   transition: all 0.3s ease;
+}
+
+/* 注册表单紧凑布局 */
+.register-form-compact .form-item {
+  margin-bottom: 16px;
+}
+
+.register-form-compact :deep(.ant-form-item-label) {
+  padding-bottom: 4px;
+}
+
+.register-form-compact .input-label {
+  font-size: 13px;
+}
+
+.register-form-compact :deep(.ant-input-affix-wrapper) {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.register-form-compact :deep(.ant-input) {
+  font-size: 14px;
 }
 
 /* 左侧品牌区域 */
@@ -670,12 +693,12 @@ const fillAccount = (role: string) => {
   background: rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  padding: 60px 40px;
-  border-radius: 30px;
+  padding: 40px 32px;
+  border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05);
   width: 100%;
-  max-width: 380px;
+  max-width: 360px;
   transition: transform 0.3s ease;
 }
 
@@ -691,30 +714,31 @@ const fillAccount = (role: string) => {
 }
 
 .logo-container {
-  width: 90px;
-  height: 90px;
+  width: 72px;
+  height: 72px;
   background: #ffffff;
-  border-radius: 22px;
+  border-radius: 18px;
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   box-shadow: 0 10px 25px rgba(56, 189, 248, 0.15);
 }
 
 .brand-logo {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   margin-bottom: 0;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));
 }
 
 .brand-title {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 800;
   color: #0f172a;
   margin: 0;
   letter-spacing: -0.5px;
+  line-height: 1.3;
 }
 
 .brand-text {
@@ -724,19 +748,19 @@ const fillAccount = (role: string) => {
 }
 
 .brand-slogan {
-  font-size: 18px;
+  font-size: 16px;
   color: #334155;
   font-weight: 500;
-  letter-spacing: 2px;
-  margin: 0 0 16px 0;
+  letter-spacing: 1px;
+  margin: 0 0 12px 0;
 }
 
 .divider {
-  width: 40px;
-  height: 4px;
+  width: 32px;
+  height: 3px;
   background: linear-gradient(90deg, #38bdf8, #818cf8);
   border-radius: 2px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .brand-desc {
@@ -752,27 +776,32 @@ const fillAccount = (role: string) => {
 /* 右侧表单区域 */
 .login-form-section {
   flex: 1;
-  padding: 60px 80px;
+  padding: 40px 60px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   background: #ffffff;
+  overflow-y: auto;
 }
 
 .form-header {
-  margin-bottom: 40px;
+  margin-bottom: 24px;
+}
+
+.form-header:has(+ div .register-form-compact) {
+  margin-bottom: 16px;
 }
 
 .welcome-text {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .sub-text {
   color: #94a3b8;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 /* 表单样式定制 */
@@ -844,14 +873,14 @@ const fillAccount = (role: string) => {
 }
 
 .modern-btn {
-  height: 50px;
-  border-radius: 12px;
+  height: 44px;
+  border-radius: 10px;
   background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%);
   border: none;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 1px;
-  box-shadow: 0 10px 20px rgba(14, 165, 233, 0.2);
+  letter-spacing: 0.5px;
+  box-shadow: 0 8px 16px rgba(14, 165, 233, 0.2);
   transition: all 0.3s ease;
 }
 

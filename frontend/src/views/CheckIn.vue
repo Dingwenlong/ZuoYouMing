@@ -1,67 +1,153 @@
 <template>
   <div class="check-in-page">
-    <a-card title="座位签到" :bordered="false">
-      <div class="unified-checkin-flow">
-        <!-- 步骤 1: 定位状态 -->
-        <div class="status-section mb-6">
-          <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div class="flex items-center">
-              <environment-two-tone :two-tone-color="gpsStatus === 'success' ? '#52c41a' : (gpsStatus === 'error' ? '#ff4d4f' : '#1890ff')" style="font-size: 24px; margin-right: 12px" />
-              <div>
-                <div class="font-bold">{{ gpsMessage }}</div>
-                <div v-if="coords" class="text-xs text-gray-500">
-                  经度: {{ coords.longitude.toFixed(6) }}, 纬度: {{ coords.latitude.toFixed(6) }}
-                </div>
-              </div>
+    <a-card :bordered="false" class="checkin-card">
+      <template #title>
+        <div class="card-title-wrapper">
+          <check-circle-outlined class="title-icon" />
+          <span>座位签到</span>
+        </div>
+      </template>
+
+      <!-- 无预约记录提示 -->
+      <div v-if="!hasReservation && !isAdmin" class="no-reservation-alert">
+        <a-result
+          status="warning"
+          title="暂无预约记录"
+          sub-title="您当前没有进行中的座位预约，请先预约座位后再来签到"
+        >
+          <template #icon>
+            <calendar-outlined style="color: #faad14; font-size: 72px;" />
+          </template>
+          <template #extra>
+            <a-button type="primary" size="large" @click="goToReserve">
+              <template #icon><search-outlined /></template>
+              去预约座位
+            </a-button>
+            <a-button size="large" @click="goToHome">
+              <template #icon><home-outlined /></template>
+              返回首页
+            </a-button>
+          </template>
+        </a-result>
+      </div>
+
+      <div v-else class="checkin-content">
+        <!-- 步骤指示器 -->
+        <div class="steps-indicator">
+          <div class="step" :class="{ active: gpsStatus !== 'success', completed: gpsStatus === 'success' }">
+            <div class="step-number">1</div>
+            <div class="step-info">
+              <div class="step-title">位置验证</div>
+              <div class="step-desc">确认您在图书馆范围内</div>
             </div>
-            <a-button size="small" @click="getLocation" :loading="locating">重新定位</a-button>
+          </div>
+          <div class="step-connector" :class="{ completed: gpsStatus === 'success' }"></div>
+          <div class="step" :class="{ active: gpsStatus === 'success' }">
+            <div class="step-number">2</div>
+            <div class="step-info">
+              <div class="step-title">扫码签到</div>
+              <div class="step-desc">扫描座位二维码完成签到</div>
+            </div>
           </div>
         </div>
 
-        <!-- 步骤 2: 扫码区域 -->
-        <div class="scan-section" :class="{ 'opacity-50 pointer-events-none': gpsStatus !== 'success' }">
-          <div v-if="isAdmin" class="admin-qr-generator">
-            <a-divider>管理员：生成测试二维码</a-divider>
-            <div class="generator-controls">
-              <a-select v-model:value="selectedArea" placeholder="选择区域" style="width: 150px">
-                <a-select-option v-for="area in areas" :key="area" :value="area">{{ area }}</a-select-option>
-              </a-select>
-              <a-select v-model:value="selectedSeatNo" placeholder="选择座位" style="width: 150px" :disabled="!selectedArea">
-                <a-select-option v-for="no in availableSeatsInArea" :key="no" :value="no">{{ no }}</a-select-option>
-              </a-select>
+        <!-- 定位状态卡片 -->
+        <div class="location-card" :class="gpsStatus">
+          <div class="location-status">
+            <div class="status-icon-wrapper">
+              <loading-outlined v-if="locating" class="spin-icon" />
+              <environment-two-tone v-else-if="gpsStatus === 'success'" two-tone-color="#52c41a" class="status-icon success" />
+              <environment-two-tone v-else-if="gpsStatus === 'error'" two-tone-color="#ff4d4f" class="status-icon error" />
+              <environment-two-tone v-else two-tone-color="#1890ff" class="status-icon" />
             </div>
-            <div v-if="generatedQrText" class="qr-display-area">
-              <div class="qr-code-box" draggable="true" @dragstart="(e) => e.dataTransfer?.setData('text', generatedQrText)">
-                <qrcode-vue :value="generatedQrText" :size="160" level="H" />
-                <p class="qr-hint">可拖拽此二维码到下方扫码区</p>
+            <div class="status-info">
+              <div class="status-title">{{ gpsMessage }}</div>
+              <div v-if="coords" class="status-detail">
+                <span class="coord-tag">经度 {{ coords.longitude.toFixed(6) }}</span>
+                <span class="coord-tag">纬度 {{ coords.latitude.toFixed(6) }}</span>
               </div>
-              <a-button type="dashed" @click="simulateScan" class="mt-2" :disabled="gpsStatus !== 'success'">
-                <template #icon><select-outlined /></template>
-                模拟扫码并签到
-              </a-button>
             </div>
           </div>
-
-          <a-alert
+          <a-button
             v-if="gpsStatus !== 'success'"
-            message="等待定位"
-            description="请先完成定位，确保您已在图书馆范围内，随后将自动开启扫码。"
-            type="warning"
-            show-icon
-            class="mb-4"
-          />
-          <a-alert
-            v-else
-            message="请扫描座位二维码"
-            description="定位已成功，请扫描您预约座位上的二维码完成签到。"
-            type="success"
-            show-icon
-            class="mb-4"
-          />
-
-          <div class="scanner-container" @dragover.prevent @drop.prevent="onDrop">
-            <qr-scanner :allow-file="isAdmin" @scan="handleQrScan" />
+            type="primary"
+            :loading="locating"
+            @click="getLocation"
+            class="location-btn"
+          >
+            <template #icon><aim-outlined /></template>
+            {{ locating ? '定位中...' : '开始定位' }}
+          </a-button>
+          <div v-else class="success-badge">
+            <check-outlined />
+            定位成功
           </div>
+        </div>
+
+        <!-- 管理员二维码生成器 -->
+        <div v-if="isAdmin" class="admin-section">
+          <a-divider orientation="left">
+            <span class="divider-text">
+              <setting-outlined />
+              管理员测试工具
+            </span>
+          </a-divider>
+          <div class="admin-controls">
+            <a-select v-model:value="selectedArea" placeholder="选择区域" style="width: 160px">
+              <a-select-option v-for="area in areas" :key="area" :value="area">{{ area }}</a-select-option>
+            </a-select>
+            <a-select v-model:value="selectedSeatNo" placeholder="选择座位" style="width: 160px" :disabled="!selectedArea">
+              <a-select-option v-for="no in availableSeatsInArea" :key="no" :value="no">{{ no }}</a-select-option>
+            </a-select>
+          </div>
+          <div v-if="generatedQrText" class="admin-qr-display">
+            <div class="qr-card" draggable="true" @dragstart="(e) => e.dataTransfer?.setData('text', generatedQrText)">
+              <qrcode-vue :value="generatedQrText" :size="140" level="H" />
+              <p class="qr-text">{{ generatedQrText }}</p>
+              <p class="qr-drag-hint">可拖拽到扫码区</p>
+            </div>
+            <a-button type="dashed" @click="simulateScan" :disabled="gpsStatus !== 'success'">
+              <template #icon><scan-outlined /></template>
+              模拟扫码签到
+            </a-button>
+          </div>
+        </div>
+
+        <!-- 扫码区域 -->
+        <div class="scanner-section" :class="{ disabled: gpsStatus !== 'success' }">
+          <div class="scanner-header-bar">
+            <div class="scanner-title">
+              <qrcode-outlined />
+              二维码扫描
+            </div>
+            <a-tag v-if="gpsStatus !== 'success'" color="warning">请先完成定位</a-tag>
+            <a-tag v-else color="success">准备就绪</a-tag>
+          </div>
+
+          <div class="scanner-wrapper" @dragover.prevent @drop.prevent="onDrop">
+            <div v-if="gpsStatus !== 'success'" class="scanner-overlay">
+              <div class="overlay-content">
+                <lock-outlined class="overlay-icon" />
+                <p>完成定位后即可扫码</p>
+              </div>
+            </div>
+            <qr-scanner
+              :allow-file="isAdmin"
+              @scan="handleQrScan"
+              @error="handleScanError"
+              @cancel="handleScanCancel"
+            />
+          </div>
+        </div>
+
+        <!-- 签到提示 -->
+        <div class="checkin-tips">
+          <a-alert
+            message="签到须知"
+            description="请确保您已到达预约座位附近，定位成功后再扫描二维码完成签到。签到成功后系统将自动跳转至首页。"
+            type="info"
+            show-icon
+          />
         </div>
       </div>
     </a-card>
@@ -71,7 +157,20 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { EnvironmentTwoTone, SelectOutlined } from '@ant-design/icons-vue'
+import {
+  EnvironmentTwoTone,
+  CheckCircleOutlined,
+  LoadingOutlined,
+  AimOutlined,
+  CheckOutlined,
+  SettingOutlined,
+  ScanOutlined,
+  QrcodeOutlined,
+  LockOutlined,
+  CalendarOutlined,
+  SearchOutlined,
+  HomeOutlined
+} from '@ant-design/icons-vue'
 import QrcodeVue from 'qrcode.vue'
 import QrScanner from '../components/CheckIn/QrScanner.vue'
 import { checkIn } from '../api/reservation'
@@ -85,34 +184,44 @@ const userInfo = computed(() => userStore.userInfo)
 const isAdmin = computed(() => userInfo.value?.role === 'admin')
 const reservation = computed(() => userStore.reservation)
 
+// 检查是否有预约记录
+const hasReservation = computed(() => {
+  return !!reservation.value && reservation.value.id
+})
+
+// 跳转到预约页面
+const goToReserve = () => {
+  router.push('/seat')
+}
+
+// 跳转到首页
+const goToHome = () => {
+  router.push('/dashboard')
+}
+
 // Admin QR Generation Logic
 const allSeats = ref<Seat[]>([])
 const areas = computed(() => [...new Set(allSeats.value.map(s => s.area))])
 const selectedArea = ref<string>('')
 const selectedSeatNo = ref<string>('')
-const availableSeatsInArea = computed(() => 
+const availableSeatsInArea = computed(() =>
   allSeats.value.filter(s => s.area === selectedArea.value).map(s => s.seatNo)
 )
 
 const generatedQrText = computed(() => {
   if (selectedArea.value && selectedSeatNo.value) {
-    // 匹配后端 ReservationService.java L349 的格式: "Area:A区,SeatNo:A-01"
     return `Area:${selectedArea.value},SeatNo:${selectedSeatNo.value}`
   }
   return ''
 })
 
 onMounted(async () => {
-  // 1. 获取座位列表
   try {
     const data = await getSeats()
     allSeats.value = data as any
   } catch (e) {
     console.error('Failed to fetch seats', e)
   }
-
-  // 2. 自动开启定位
-  getLocation()
 })
 
 watch(selectedArea, () => {
@@ -132,6 +241,15 @@ const onDrop = (e: DragEvent) => {
   }
 }
 
+const handleScanError = (errorMsg: string) => {
+  message.error(errorMsg)
+}
+
+const handleScanCancel = () => {
+  // 用户取消扫码，可以在这里添加额外的处理逻辑
+  console.log('用户取消扫码')
+}
+
 // QR Code Logic
 const handleQrScan = async (text: string) => {
   if (!reservation.value) {
@@ -143,14 +261,14 @@ const handleQrScan = async (text: string) => {
     message.error('签到失败：请先完成定位')
     return
   }
-  
+
   try {
-    await checkIn(reservation.value.id, { 
+    await checkIn(reservation.value.id, {
       qrCode: text,
       lat: coords.value.latitude,
       lng: coords.value.longitude
     })
-    message.success('扫码并定位签到成功')
+    message.success('扫码签到成功！')
     userStore.checkIn()
     router.push('/dashboard')
   } catch (e: any) {
@@ -161,7 +279,7 @@ const handleQrScan = async (text: string) => {
 // GPS Logic
 const locating = ref(false)
 const gpsStatus = ref<'idle' | 'success' | 'error'>('idle')
-const gpsMessage = ref('正在检测您的位置...')
+const gpsMessage = ref('等待定位...')
 const coords = ref<GeolocationCoordinates | null>(null)
 
 const getLocation = () => {
@@ -181,13 +299,13 @@ const getLocation = () => {
       coords.value = position.coords
       locating.value = false
       gpsStatus.value = 'success'
-      gpsMessage.value = '定位成功，已在范围内'
+      gpsMessage.value = '定位成功，已在图书馆范围内'
     },
     (error) => {
       locating.value = false
       gpsStatus.value = 'error'
-      gpsMessage.value = `定位失败: ${error.message}`
-      message.error('定位失败，请检查定位权限')
+      gpsMessage.value = '定位失败，请检查定位权限'
+      message.error('定位失败：' + error.message)
     },
     { enableHighAccuracy: true, timeout: 10000 }
   )
@@ -197,114 +315,384 @@ const getLocation = () => {
 <style scoped>
 .check-in-page {
   padding: 24px;
-}
-
-.unified-checkin-flow {
-  max-width: 600px;
+  max-width: 800px;
   margin: 0 auto;
 }
 
-.flex {
+.checkin-card {
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* 无预约记录提示 */
+.no-reservation-alert {
+  padding: 48px 24px;
+}
+
+.no-reservation-alert :deep(.ant-result-extra) {
   display: flex;
-}
-
-.items-center {
-  align-items: center;
-}
-
-.justify-between {
-  justify-content: space-between;
-}
-
-.p-4 {
-  padding: 1rem;
-}
-
-.bg-gray-50 {
-  background-color: #f9fafb;
-}
-
-.rounded-lg {
-  border-radius: 0.5rem;
-}
-
-.font-bold {
-  font-weight: 700;
-}
-
-.text-xs {
-  font-size: 0.75rem;
-}
-
-.text-gray-500 {
-  color: #6b7280;
-}
-
-.mb-4 {
-  margin-bottom: 1rem;
-}
-
-.mb-6 {
-  margin-bottom: 1.5rem;
-}
-
-.mt-2 {
-  margin-top: 0.5rem;
-}
-
-.admin-qr-generator {
-  width: 100%;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.generator-controls {
-  display: flex;
-  gap: 12px;
+  gap: 16px;
   justify-content: center;
-  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-.qr-display-area {
+.card-title-wrapper {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
 }
 
-.qr-code-box {
-  padding: 16px;
-  background: white;
-  border: 1px dashed #d9d9d9;
-  border-radius: 4px;
-  cursor: grab;
+.title-icon {
+  color: #1890ff;
+  font-size: 24px;
+}
+
+.checkin-content {
+  padding: 8px 0;
+}
+
+/* 步骤指示器 */
+.steps-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+  padding: 0 24px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.5;
   transition: all 0.3s;
 }
 
-.qr-code-box:hover {
+.step.active {
+  opacity: 1;
+}
+
+.step.completed {
+  opacity: 1;
+}
+
+.step.completed .step-number {
+  background: #52c41a;
+  border-color: #52c41a;
+  color: white;
+}
+
+.step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #d9d9d9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s;
+}
+
+.step.active .step-number {
   border-color: #1890ff;
-  background: #f0f7ff;
+  color: #1890ff;
 }
 
-.qr-hint {
-  margin-top: 8px;
+.step-info {
+  text-align: left;
+}
+
+.step-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.step-desc {
   font-size: 12px;
-  color: #8c8c8c;
+  color: #6b7280;
 }
 
-.scanner-container {
-  width: 100%;
+.step-connector {
+  flex: 1;
+  max-width: 80px;
+  height: 2px;
+  background: #e5e7eb;
+  margin: 0 16px;
+  transition: all 0.3s;
+}
+
+.step-connector.completed {
+  background: #52c41a;
+}
+
+/* 定位状态卡片 */
+.location-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: #f8fafc;
+  border-radius: 12px;
+  margin-bottom: 24px;
   border: 2px solid transparent;
   transition: all 0.3s;
 }
 
-.opacity-50 {
-  opacity: 0.5;
+.location-card.success {
+  background: #f6ffed;
+  border-color: #b7eb8f;
 }
 
-.pointer-events-none {
-  pointer-events: none;
+.location-card.error {
+  background: #fff2f0;
+  border-color: #ffccc7;
+}
+
+.location-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.status-icon {
+  font-size: 24px;
+}
+
+.status-icon.success {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.spin-icon {
+  font-size: 24px;
+  color: #1890ff;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.status-detail {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.coord-tag {
+  font-size: 12px;
+  color: #6b7280;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.location-btn {
+  border-radius: 8px;
+}
+
+.success-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #52c41a;
+  font-weight: 600;
+  padding: 8px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(82, 196, 26, 0.15);
+}
+
+/* 管理员区域 */
+.admin-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 12px;
+}
+
+.divider-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.admin-controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-qr-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.qr-card {
+  padding: 16px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  cursor: grab;
+  transition: all 0.3s;
+}
+
+.qr-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.qr-text {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: #6b7280;
+  font-family: monospace;
+}
+
+.qr-drag-hint {
+  margin: 8px 0 0 0;
+  font-size: 11px;
+  color: #1890ff;
+}
+
+/* 扫码区域 */
+.scanner-section {
+  border: 2px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s;
+}
+
+.scanner-section.disabled {
+  opacity: 0.7;
+}
+
+.scanner-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.scanner-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.scanner-wrapper {
+  position: relative;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  background: white;
+}
+
+.scanner-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.overlay-content {
+  text-align: center;
+  color: #6b7280;
+}
+
+.overlay-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  color: #d9d9d9;
+}
+
+/* 签到提示 */
+.checkin-tips {
+  margin-top: 24px;
+}
+
+/* 响应式 */
+@media (max-width: 640px) {
+  .check-in-page {
+    padding: 16px;
+  }
+
+  .steps-indicator {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .step-connector {
+    width: 2px;
+    height: 24px;
+    max-width: none;
+  }
+
+  .location-card {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .location-status {
+    flex-direction: column;
+  }
+
+  .admin-controls {
+    flex-direction: column;
+  }
+
+  .admin-controls .ant-select {
+    width: 100% !important;
+  }
 }
 </style>

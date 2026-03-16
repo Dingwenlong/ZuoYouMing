@@ -57,6 +57,9 @@ public class SysUser implements Serializable {
     @Schema(description = "微信OpenID")
     private String openId;
 
+    @Schema(description = "学号/工号")
+    private String studentId;
+
     public Long getId() {
         return id;
     }
@@ -167,5 +170,13 @@ public class SysUser implements Serializable {
 
     public void setOpenId(String openId) {
         this.openId = openId;
+    }
+
+    public String getStudentId() {
+        return studentId;
+    }
+
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
     }
 }

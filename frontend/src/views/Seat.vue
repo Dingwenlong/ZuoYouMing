@@ -235,7 +235,8 @@ const isSlotPast = (slot: string) => {
 
 const isSlotDisabled = (slot: string) => {
   // 如果该时段已被占用，也禁用
-  if (selectedSeat.value?.slotStatuses?.[slot] && selectedSeat.value.slotStatuses[slot] !== 'available') {
+  const seat = selectedSeat.value as any
+  if (seat?.slotStatuses?.[slot] && seat.slotStatuses[slot] !== 'available') {
     return true
   }
 
@@ -333,7 +334,8 @@ const getSeatIcon = (status: string) => {
 
 const getSlotColor = (seat: Seat, slot: string) => {
   if (isSlotPast(slot)) return '#bfbfbf' // 已过时段显示为灰色
-  const status = seat.slotStatuses?.[slot] || 'available'
+  const s = seat as any
+  const status = s.slotStatuses?.[slot] || 'available'
   switch (status) {
     case 'available': return '#10b981'
     case 'reserved': return '#3b82f6'
@@ -359,6 +361,7 @@ const mapSeats = computed<MapSeat[]>(() => {
     .filter(seat => seat.id !== undefined)
     .map((seat, index) => {
       // 这里的 x, y 是后端存储的真实坐标，如果不存在则按网格排列显示
+      const s = seat as any
       return {
         id: seat.id!,
         label: seat.seatNo,
@@ -366,7 +369,7 @@ const mapSeats = computed<MapSeat[]>(() => {
         y: seat.y || 100 + Math.floor(index / 6) * 80,
         status: seat.status,
         type: 'normal',
-        slotStatuses: seat.slotStatuses
+        slotStatuses: s.slotStatuses
       }
     })
 })
@@ -468,34 +471,39 @@ const confirmBooking = async () => {
     message.warning('请选择预约时段')
     return
   }
-  
+
   bookingLoading.value = true
   try {
     if (selectedSeat.value) {
-      const res = await createReservation({
-        seatId: selectedSeat.value.id!,
-        slots: bookingForm.slots
-      })
-      
-      const resData = (res as any).data
-      
+      // 逐个时段创建预约
+      let firstRes: any = null
+      for (const slot of bookingForm.slots) {
+        const res = await createReservation({
+          seatId: selectedSeat.value.id!,
+          slot: slot
+        })
+        if (!firstRes) firstRes = res
+      }
+
+      const resData = (firstRes as any)?.data
+
       if (resData && resData.id) {
         // 更新座位状态 (如果是当前时段，则设为 occupied)
         const currentSlot = getCurrentSlot()
         if (bookingForm.slots.includes(currentSlot)) {
           selectedSeat.value.status = 'occupied'
         }
-        
+
         // 触发全局倒计时 (针对第一个时段)
         userStore.setReservation(
-          resData.id, 
-          selectedSeat.value.id!, 
+          resData.id,
+          selectedSeat.value.id!,
           selectedSeat.value.seatNo,
           new Date(resData.startTime).getTime(),
           new Date(resData.deadline).getTime()
         )
       }
-      
+
       message.success(`预约成功！请在规定时间内签到。`)
       isModalVisible.value = false
       fetchSeats() // 刷新列表以获取最新的 slotStatuses

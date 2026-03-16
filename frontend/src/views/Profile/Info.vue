@@ -26,7 +26,6 @@
         <!-- 右侧表单区域 -->
         <div class="form-section">
           <a-form
-            ref="formRef"
             :model="formState"
             :rules="rules"
             layout="vertical"
@@ -54,7 +53,7 @@
               </a-col>
               <a-col :span="12">
                 <a-form-item label="手机号" name="phone">
-                  <a-input v-model:value="formState.phone" placeholder="请输入手机号" disabled />
+                  <a-input v-model:value="formState.phone" placeholder="请输入手机号" />
                 </a-form-item>
               </a-col>
             </a-row>
@@ -72,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onUnmounted, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { UserOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '../../stores/user'
 import { message } from 'ant-design-vue'
@@ -85,7 +84,6 @@ const router = useRouter()
 const isNewUser = computed(() => userStore.isNewUser)
 const userInfo = computed(() => userStore.userInfo)
 
-const formRef = ref()
 const loading = ref(false)
 
 const formState = reactive({
@@ -110,13 +108,14 @@ const handleFinish = async (values: any) => {
     // 准备更新数据
     const updatedInfo = {
       realName: values.realName,
-      phone: userInfo.value?.phone || '', // 手机号已在注册时绑定，保持不变
+      studentId: values.studentId,
+      phone: values.phone || userInfo.value?.phone || '', // 使用表单中的手机号
       username: userInfo.value?.username // 保持登录账号不变
     }
 
     // 调用后端接口保存
     await updateProfile(updatedInfo)
-    
+
     // 更新本地状态
     if (isNewUser.value) {
       userStore.completeBinding({ ...updatedInfo, username: userInfo.value?.username || '' })
@@ -127,8 +126,8 @@ const handleFinish = async (values: any) => {
       userStore.completeBinding({ ...updatedInfo, username: userInfo.value?.username || '' })
       message.success('保存成功')
     }
-  } catch (error) {
-    message.error('操作失败')
+  } catch (error: any) {
+    message.error(error.message || '操作失败')
   } finally {
     loading.value = false
   }
@@ -138,7 +137,8 @@ onMounted(() => {
   if (userInfo.value) {
     // 回填信息 (如果是已有用户)
     formState.alias = userInfo.value.username || ''
-    formState.studentId = userInfo.value.username || ''
+    // 新用户学号/工号应为空，需要用户自行填写
+    formState.studentId = userInfo.value.studentId || ''
     formState.realName = userInfo.value.realName || ''
     formState.phone = userInfo.value.phone || ''
   }

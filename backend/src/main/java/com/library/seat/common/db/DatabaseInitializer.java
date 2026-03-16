@@ -227,38 +227,6 @@ public class DatabaseInitializer {
                     "(8, 'checkin_after_window', '15', '预约起始后可签到时间(分钟)'), " +
                     "(9, 'late_reservation_grace_period', '5', '过时预约签到宽限时间(分钟)')");
 
-            // 10. 创建系统菜单表
-            log.info("Checking/Creating table: sys_menu");
-            stmt.execute("CREATE TABLE IF NOT EXISTS `sys_menu` (" +
-                    "`id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID'," +
-                    "`parent_id` bigint(20) DEFAULT '0' COMMENT '父菜单ID'," +
-                    "`name` varchar(50) DEFAULT NULL COMMENT '菜单名称'," +
-                    "`path` varchar(100) DEFAULT NULL COMMENT '路由路径'," +
-                    "`title` varchar(50) DEFAULT NULL COMMENT '菜单标题'," +
-                    "`icon` varchar(50) DEFAULT NULL COMMENT '图标'," +
-                    "`roles` varchar(255) DEFAULT NULL COMMENT '权限角色JSON'," +
-                    "`sort_order` int(11) DEFAULT '0' COMMENT '排序'," +
-                    "`deleted` int(11) DEFAULT '0' COMMENT '是否删除 0:否 1:是'," +
-                    "PRIMARY KEY (`id`)" +
-                    ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统菜单表'");
-
-            // 初始化默认菜单 (REPLACE INTO 以确保更新，解决乱码覆盖问题)
-            String[] initialMenus = {
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (1, 0, 'dashboard', '/dashboard', '首页', 'DashboardOutlined', '[\"student\",\"admin\",\"librarian\"]', 1)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (2, 0, 'seat', '/seat', '座位预约', 'DesktopOutlined', '[\"student\",\"admin\",\"librarian\"]', 2)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (3, 0, 'checkin', '/checkin', '签到', 'EnvironmentOutlined', '[\"student\",\"admin\",\"librarian\"]', 3)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (4, 0, 'square', '/square', '消息广场', 'CommentOutlined', '[\"student\",\"admin\",\"librarian\"]', 4)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (5, 0, 'stats', '/stats', '数据统计', 'BarChartOutlined', '[\"admin\",\"librarian\"]', 5)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (6, 0, 'system', '/system', '系统管理', 'SettingOutlined', '[\"admin\",\"librarian\"]', 6)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (7, 6, 'SystemUser', '/system/user', '用户管理', 'UserOutlined', '[\"admin\"]', 1)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (8, 6, 'SystemSeat', '/system/seat', '座位管理', 'ProjectOutlined', '[\"admin\",\"librarian\"]', 2)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (9, 6, 'SystemLog', '/system/log', '系统日志', 'FileTextOutlined', '[\"admin\"]', 3)",
-                "REPLACE INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES (10, 6, 'SystemConfig', '/system/config', '系统配置', 'SettingOutlined', '[\"admin\"]', 4)"
-            };
-            for (String sql : initialMenus) {
-                try { stmt.execute(sql); } catch (SQLException e) { log.warn("Failed to insert menu: " + e.getMessage()); }
-            }
-
             log.info("Database initialization completed successfully.");
 
         } catch (SQLException e) {

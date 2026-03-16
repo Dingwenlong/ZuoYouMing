@@ -245,13 +245,13 @@ public class AuthController {
         return Result.success(data);
     }
 
-    @Operation(summary = "完善个人信息", description = "更新当前登录用户的真实姓名和手机号")
+    @Operation(summary = "完善个人信息", description = "更新当前登录用户的真实姓名、手机号和学号/工号")
     @PutMapping("/profile")
     public Result<Boolean> updateProfile(@RequestBody SysUser user) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         SysUser currentUser = userDetailsService.getOne(new LambdaQueryWrapper<SysUser>()
                 .eq(SysUser::getUsername, username));
-        
+
         if (currentUser == null) {
             return Result.error("用户不存在");
         }
@@ -262,6 +262,17 @@ public class AuthController {
         }
         if (user.getPhone() != null) {
             currentUser.setPhone(user.getPhone());
+        }
+        // 更新学号/工号，需校验唯一性
+        if (user.getStudentId() != null && !user.getStudentId().isEmpty()) {
+            // 检查学号是否已被其他用户使用
+            SysUser existingUser = userDetailsService.getOne(new LambdaQueryWrapper<SysUser>()
+                    .eq(SysUser::getStudentId, user.getStudentId())
+                    .ne(SysUser::getId, currentUser.getId()));
+            if (existingUser != null) {
+                return Result.error(400, "该学号/工号已被使用");
+            }
+            currentUser.setStudentId(user.getStudentId());
         }
         currentUser.setUpdateTime(new java.util.Date());
 

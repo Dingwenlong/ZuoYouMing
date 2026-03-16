@@ -304,15 +304,15 @@ const handleGenerateRandom = () => {
   const colCount = 5
   
   for (let i = 0; i < count; i++) {
-    const area = areas[Math.floor(Math.random() * areas.length)]
-    const seatNo = `${area.charAt(0)}-${timestamp}${i.toString().padStart(2, '0')}`
+    const randomArea = areas[Math.floor(Math.random() * areas.length)] || 'A区'
+    const seatNo = `${randomArea.charAt(0)}-${timestamp}${i.toString().padStart(2, '0')}`
     
     const row = Math.floor(i / colCount)
     const col = i % colCount
     
     randomData.push({
       seatNo,
-      area,
+      area: randomArea,
       type: types[Math.floor(Math.random() * types.length)],
       status: 'available',
       // X 间距 120，Y 间距 100，起始偏移 50

@@ -24,9 +24,11 @@ CREATE TABLE `sys_user` (
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` int(11) DEFAULT '0' COMMENT '是否删除 0:否 1:是',
   `open_id` varchar(64) DEFAULT NULL COMMENT '微信OpenID',
+  `student_id` varchar(50) DEFAULT NULL COMMENT '学号/工号',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`),
-  UNIQUE KEY `uk_open_id` (`open_id`)
+  UNIQUE KEY `uk_open_id` (`open_id`),
+  UNIQUE KEY `uk_student_id` (`student_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
 -- ----------------------------
@@ -63,6 +65,9 @@ CREATE TABLE `sys_reservation` (
   `type` varchar(20) DEFAULT 'appointment' COMMENT '类型: appointment, immediate',
   `reservation_date` date DEFAULT NULL COMMENT '预约日期',
   `slot` varchar(20) DEFAULT NULL COMMENT '时段: morning, afternoon, evening',
+  `last_present_time` datetime DEFAULT NULL COMMENT '最后在场时间（用于占座检测）',
+  `total_away_minutes` int(11) DEFAULT '0' COMMENT '累计离开时长(分钟)',
+  `occupancy_alert_sent` tinyint(1) DEFAULT '0' COMMENT '是否已发送占座预警 0:否 1:是',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` int(11) DEFAULT '0' COMMENT '是否删除 0:否 1:是',
@@ -78,15 +83,20 @@ DROP TABLE IF EXISTS `sys_appeal`;
 CREATE TABLE `sys_appeal` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `reservation_id` bigint(20) NOT NULL COMMENT '关联预约记录ID',
+  `user_id` bigint(20) NOT NULL COMMENT '申诉用户ID',
+  `appeal_type` varchar(50) DEFAULT 'OTHER' COMMENT '申诉类型: PHONE_DEAD, QR_CODE_DAMAGED, GPS_ERROR, SYSTEM_ERROR, OTHER',
   `reason` text NOT NULL COMMENT '申诉理由',
   `images` text DEFAULT NULL COMMENT '图片凭证 (JSON数组或逗号分隔)',
   `status` varchar(20) DEFAULT 'pending' COMMENT 'pending (待审核), approved (通过), rejected (驳回)',
   `reply` text DEFAULT NULL COMMENT '管理员回复',
+  `credit_returned` tinyint(1) DEFAULT '0' COMMENT '是否已返还信用分 0:否 1:是',
+  `credit_amount` int(11) DEFAULT '0' COMMENT '返还信用分数量',
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` int(11) DEFAULT '0' COMMENT '是否删除 0:否 1:是',
   PRIMARY KEY (`id`),
-  KEY `idx_reservation_id` (`reservation_id`)
+  KEY `idx_reservation_id` (`reservation_id`),
+  KEY `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='违规申诉表';
 
 -- ----------------------------
@@ -157,9 +167,9 @@ CREATE TABLE `sys_notification` (
 -- Records of sys_user
 -- ----------------------------
 -- password: 123456
-INSERT INTO `sys_user` (`id`, `username`, `password`, `real_name`, `role`, `status`, `credit_score`) VALUES 
-(1, 'admin', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '管理员', 'admin', 'active', 100),
-(2, 'lib', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '图书馆员', 'librarian', 'active', 100),
+INSERT INTO `sys_user` (`id`, `username`, `password`, `real_name`, `role`, `phone`, `status`, `credit_score`) VALUES 
+(1, 'admin', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '管理员', 'admin', '13800000000', 'active', 100),
+(2, 'lib', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '图书馆员', 'librarian', '13800000001', 'active', 100),
 (3, 'student', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '学生', 'student', 'active', 100);
 
 -- ----------------------------
@@ -173,11 +183,70 @@ INSERT INTO `sys_seat` (`seat_no`, `area`, `type`, `status`, `x_coord`, `y_coord
 ('B-02', 'B区', '标准', 'available', 200, 200);
 
 -- ----------------------------
+-- Table structure for sys_seat_occupancy
+-- ----------------------------
+DROP TABLE IF EXISTS `sys_seat_occupancy`;
+CREATE TABLE `sys_seat_occupancy` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `reservation_id` bigint(20) NOT NULL COMMENT '关联预约ID',
+  `user_id` bigint(20) NOT NULL COMMENT '用户ID',
+  `seat_id` bigint(20) NOT NULL COMMENT '座位ID',
+  `check_in_time` datetime NOT NULL COMMENT '签到时间',
+  `last_detected_time` datetime DEFAULT NULL COMMENT '最后检测到的时间',
+  `total_away_minutes` int(11) DEFAULT '0' COMMENT '累计离开时长(分钟)',
+  `occupancy_status` varchar(20) DEFAULT 'normal' COMMENT '状态: normal(正常), warning(预警), occupied(占座)',
+  `warning_count` int(11) DEFAULT '0' COMMENT '预警次数',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_reservation_id` (`reservation_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_seat_id` (`seat_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='占座检测记录表';
+
+-- ----------------------------
+-- Table structure for sys_config
+-- ----------------------------
+DROP TABLE IF EXISTS `sys_config`;
+CREATE TABLE `sys_config` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `config_key` varchar(100) NOT NULL COMMENT '配置键',
+  `config_value` varchar(500) DEFAULT NULL COMMENT '配置值',
+  `config_name` varchar(100) DEFAULT NULL COMMENT '配置名称',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_config_key` (`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
+
+-- ----------------------------
+-- Records of sys_config (Default Configs)
+-- ----------------------------
+INSERT INTO `sys_config` (`config_key`, `config_value`, `config_name`) VALUES
+('occupancy_check_interval', '5', '占座检测间隔(分钟)'),
+('occupancy_threshold', '60', '占座判定阈值(分钟)'),
+('occupancy_warning_time', '45', '占座预警时间(分钟)'),
+('max_away_time', '120', '单次最大离开时间(分钟)'),
+('closing_time', '22:00', '图书馆闭馆时间'),
+('closing_reminder_minutes', '30', '闭馆提醒提前时间(分钟)'),
+('occupancy_credit_deduct', '15', '占座违规扣分'),
+('violation_time', '30', '暂离超时时间(分钟)'),
+('min_credit_score', '60', '预约所需最低信用分'),
+('message_square_enabled', 'true', '消息广场是否允许发言'),
+('library_latitude', '0', '图书馆纬度'),
+('library_longitude', '0', '图书馆经度'),
+('release_buffer_time', '15', '退座截止时间(分钟)'),
+('checkin_before_window', '15', '预约起始前可签到时间(min)'),
+('checkin_after_window', '15', '预约起始后可签到时间(min)'),
+('late_reservation_grace_period', '5', '过时预约签到宽限时间(min)');
+
+-- ----------------------------
 -- Records of sys_menu
 -- ----------------------------
 INSERT INTO `sys_menu` (`id`, `parent_id`, `name`, `path`, `title`, `icon`, `roles`, `sort_order`) VALUES
 (1, 0, 'dashboard', '/dashboard', '首页', 'ep:house', '["student","admin","librarian"]', 1),
 (2, 0, 'seat', '/seat', '座位预约', 'ep:reading', '["student","admin","librarian"]', 2),
-(3, 0, 'seatManage', '/system/seat', '座位管理', 'ep:management', '["admin","librarian"]', 3);
+(3, 0, 'seatManage', '/system/seat', '座位管理', 'ep:management', '["admin","librarian"]', 3),
+(4, 0, 'occupancy', '/system/occupancy', '占座监控', 'ep:monitor', '["admin","librarian"]', 4);
 
 SET FOREIGN_KEY_CHECKS = 1;

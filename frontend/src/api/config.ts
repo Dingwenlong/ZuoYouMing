@@ -20,7 +20,14 @@ const mockConfigs: SysConfig[] = [
   { id: 6, configKey: 'release_buffer_time', configValue: '15', configName: '退座截止时间(分钟)' },
   { id: 7, configKey: 'checkin_before_window', configValue: '15', configName: '预约起始前可签到时间(min)' },
   { id: 8, configKey: 'checkin_after_window', configValue: '15', configName: '预约起始后可签到时间(min)' },
-  { id: 9, configKey: 'late_reservation_grace_period', configValue: '5', configName: '过时预约签到宽限时间(min)' }
+  { id: 9, configKey: 'late_reservation_grace_period', configValue: '5', configName: '过时预约签到宽限时间(min)' },
+  { id: 10, configKey: 'occupancy_check_interval', configValue: '5', configName: '占座检测间隔(分钟)' },
+  { id: 11, configKey: 'occupancy_threshold', configValue: '60', configName: '占座判定阈值(分钟)' },
+  { id: 12, configKey: 'occupancy_warning_time', configValue: '45', configName: '占座预警时间(分钟)' },
+  { id: 13, configKey: 'max_away_time', configValue: '120', configName: '单次最大离开时间(分钟)' },
+  { id: 14, configKey: 'closing_time', configValue: '22:00', configName: '图书馆闭馆时间' },
+  { id: 15, configKey: 'closing_reminder_minutes', configValue: '30', configName: '闭馆提醒提前时间(分钟)' },
+  { id: 16, configKey: 'occupancy_credit_deduct', configValue: '15', configName: '占座违规扣分' }
 ]
 
 export function getConfigs() {

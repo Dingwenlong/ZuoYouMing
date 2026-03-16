@@ -50,6 +50,15 @@ public class Reservation implements Serializable {
     @Schema(description = "状态: reserved, checked_in, completed, cancelled, violation", example = "reserved")
     private String status;
 
+    @Schema(description = "最后在场时间（用于占座检测）")
+    private Date lastPresentTime;
+
+    @Schema(description = "累计离开时长(分钟)")
+    private Integer totalAwayMinutes;
+
+    @Schema(description = "是否已发送占座预警 0:否 1:是")
+    private Integer occupancyAlertSent;
+
     @Schema(description = "创建时间")
     private Date createTime;
 
@@ -161,6 +170,30 @@ public class Reservation implements Serializable {
 
     public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public Date getLastPresentTime() {
+        return lastPresentTime;
+    }
+
+    public void setLastPresentTime(Date lastPresentTime) {
+        this.lastPresentTime = lastPresentTime;
+    }
+
+    public Integer getTotalAwayMinutes() {
+        return totalAwayMinutes;
+    }
+
+    public void setTotalAwayMinutes(Integer totalAwayMinutes) {
+        this.totalAwayMinutes = totalAwayMinutes;
+    }
+
+    public Integer getOccupancyAlertSent() {
+        return occupancyAlertSent;
+    }
+
+    public void setOccupancyAlertSent(Integer occupancyAlertSent) {
+        this.occupancyAlertSent = occupancyAlertSent;
     }
 
     public Integer getDeleted() {

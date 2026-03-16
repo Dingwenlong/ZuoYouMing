@@ -60,7 +60,7 @@
     >
       <a-form layout="vertical">
         <a-form-item label="违规记录">
-          <p>{{ currentRecord?.startTime }} - {{ currentRecord?.seatNumber }}</p>
+          <p>{{ currentRecord?.startTime }} - {{ currentRecord?.seatNo }}</p>
         </a-form-item>
         <a-form-item label="申诉理由" required>
           <a-textarea v-model:value="appealReason" :rows="4" placeholder="请详细描述申诉理由..." />
@@ -87,7 +87,6 @@ import { ref, onMounted } from 'vue'
 import { 
   ClockCircleOutlined, 
   CheckCircleOutlined, 
-  CloseCircleOutlined, 
   ExclamationCircleOutlined,
   PlusOutlined,
   PlayCircleOutlined,
@@ -165,7 +164,8 @@ const submitAppeal = async () => {
   submitting.value = true
   try {
     await submitAppealApi(currentRecord.value.id, {
-      reason: appealReason.value
+      reason: appealReason.value,
+      appealType: 'OTHER'
     })
     message.success('申诉已提交，请等待管理员审核')
     appealVisible.value = false

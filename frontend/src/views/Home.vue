@@ -104,14 +104,11 @@ import 'dayjs/locale/zh-cn'
 import request from '../utils/request'
 import { getDashboardStats } from '../api/stats'
 import { wsService } from '../utils/websocket'
-import { useUserStore } from '../stores/user'
 
 dayjs.extend(relativeTime)
 dayjs.locale('zh-cn')
 
 const router = useRouter()
-const userStore = useUserStore()
-const userInfo = computed(() => userStore.userInfo)
 
 const stats = ref({
   totalSeats: 0,
@@ -140,7 +137,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  wsService.off('stats_update')
+  wsService.off('stats_update', () => {})
 })
 
 const usageChartOption = computed(() => ({

@@ -22,16 +22,18 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `deleted` int(11) DEFAULT '0' COMMENT '是否删除 0:否 1:是',
   `open_id` varchar(64) DEFAULT NULL COMMENT '微信OpenID',
+  `student_id` varchar(50) DEFAULT NULL COMMENT '学号/工号',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`),
-  UNIQUE KEY `uk_open_id` (`open_id`)
+  UNIQUE KEY `uk_open_id` (`open_id`),
+  UNIQUE KEY `uk_student_id` (`student_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
 -- 初始用户账号 (密码: 123456)
-INSERT INTO `sys_user` (`id`, `username`, `password`, `real_name`, `role`, `status`, `credit_score`) VALUES 
-(1, 'admin', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '管理员', 'admin', 'active', 100),
-(2, 'lib', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '图书馆员', 'librarian', 'active', 100),
-(3, 'student', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '学生', 'student', 'active', 100);
+INSERT INTO `sys_user` (`id`, `username`, `password`, `real_name`, `role`, `phone`, `status`, `credit_score`) VALUES 
+(1, 'admin', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '管理员', 'admin', '13800000000', 'active', 100),
+(2, 'lib', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '图书馆员', 'librarian', '13800000001', 'active', 100),
+(3, 'student', '$2a$10$7JB720yubVSZv5W8vNGkarOu8wO0QRYJGW.u/y/m1/s.p.q.r.s', '学生', 'student', '13800000002', 'active', 100);
 
 -- 1.2 座位表
 CREATE TABLE IF NOT EXISTS `sys_seat` (

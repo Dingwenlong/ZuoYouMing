@@ -18,8 +18,8 @@ class WebSocketService {
 
     const headers = token ? { 'Authorization': 'Bearer ' + token } : {}
 
-    this.stompClient.connect(headers, 
-      (frame) => {
+    this.stompClient.connect(headers,
+      () => {
         this.isConnected = true
         console.log('WebSocket connected')
         

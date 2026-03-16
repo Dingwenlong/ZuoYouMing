@@ -23,6 +23,7 @@ export interface UserInfo {
   avatar?: string | null
   phone?: string | null
   realName?: string | null
+  studentId?: string | null
 }
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'

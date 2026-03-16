@@ -29,7 +29,7 @@ services:
     container_name: library-emqx
     restart: always
     ports:
-      - "1883:1883"
+      - "11883:1883"
       - "8083:8083"
       - "8084:8084"
       - "8883:8883"

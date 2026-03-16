@@ -1,6 +1,7 @@
 package com.library.seat.modules.job;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.library.seat.modules.occupancy.service.OccupancyMonitorService;
 import com.library.seat.modules.reservation.entity.Reservation;
 import com.library.seat.modules.reservation.service.ReservationService;
 import com.library.seat.modules.seat.entity.Seat;
@@ -40,6 +41,9 @@ public class ReservationJob {
 
     @Autowired
     private com.library.seat.modules.sys.service.SysLogService sysLogService;
+
+    @Autowired
+    private OccupancyMonitorService occupancyMonitorService;
 
     private void sendUserAlert(Long userId, String message) {
         // Send to specific user: /user/{userId}/queue/alerts
@@ -161,5 +165,34 @@ public class ReservationJob {
             // 通知前端清理状态
             reservationService.broadcastReservationUpdate(res.getUserId(), "reservation_ended", "expired");
         }
+    }
+
+    /**
+     * 每5分钟执行占座检测
+     */
+    @Scheduled(cron = "0 */5 * * * ?")
+    @Transactional(rollbackFor = Exception.class)
+    public void checkOccupancy() {
+        log.info("Executing Occupancy Check Job...");
+        occupancyMonitorService.performOccupancyCheck();
+    }
+
+    /**
+     * 每日21:30发送闭馆提醒
+     */
+    @Scheduled(cron = "0 30 21 * * ?")
+    public void sendClosingReminder() {
+        log.info("Executing Closing Reminder Job...");
+        occupancyMonitorService.sendClosingReminder();
+    }
+
+    /**
+     * 每日22:00执行闭馆自动签退
+     */
+    @Scheduled(cron = "0 0 22 * * ?")
+    @Transactional(rollbackFor = Exception.class)
+    public void autoCheckoutAtClosing() {
+        log.info("Executing Auto Checkout at Closing Job...");
+        occupancyMonitorService.autoCheckoutAtClosing();
     }
 }

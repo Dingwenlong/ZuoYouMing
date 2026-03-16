@@ -75,7 +75,7 @@ const handleCheckIn = async () => {
   if (!reservation.value?.id) return
   loading.value = true
   try {
-    await checkIn(reservation.value.id)
+    await checkIn(reservation.value.id, {})
     userStore.checkIn()
     message.success('签到成功')
   } catch (e) {

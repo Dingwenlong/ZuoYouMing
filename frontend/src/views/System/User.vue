@@ -157,7 +157,7 @@ const fetchData = async () => {
 const filteredUsers = computed(() => {
   return users.value.filter(user => {
     const matchUsername = !searchForm.username || user.username.includes(searchForm.username)
-    const matchRealName = !searchForm.realName || user.realName.includes(searchForm.realName)
+    const matchRealName = !searchForm.realName || (user.realName && user.realName.includes(searchForm.realName))
     return matchUsername && matchRealName
   })
 })

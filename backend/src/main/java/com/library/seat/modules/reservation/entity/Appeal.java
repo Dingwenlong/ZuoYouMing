@@ -19,6 +19,12 @@ public class Appeal implements Serializable {
     @Schema(description = "关联预约记录ID")
     private Long reservationId;
 
+    @Schema(description = "申诉用户ID")
+    private Long userId;
+
+    @Schema(description = "申诉类型: PHONE_DEAD, QR_CODE_DAMAGED, GPS_ERROR, SYSTEM_ERROR, OTHER")
+    private String appealType;
+
     @Schema(description = "申诉理由")
     private String reason;
 
@@ -30,6 +36,12 @@ public class Appeal implements Serializable {
 
     @Schema(description = "管理员回复")
     private String reply;
+
+    @Schema(description = "是否已返还信用分 0:否 1:是")
+    private Integer creditReturned;
+
+    @Schema(description = "返还信用分数量")
+    private Integer creditAmount;
 
     @Schema(description = "创建时间")
     private Date createTime;
@@ -54,6 +66,22 @@ public class Appeal implements Serializable {
 
     public void setReservationId(Long reservationId) {
         this.reservationId = reservationId;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getAppealType() {
+        return appealType;
+    }
+
+    public void setAppealType(String appealType) {
+        this.appealType = appealType;
     }
 
     public String getReason() {
@@ -86,6 +114,22 @@ public class Appeal implements Serializable {
 
     public void setReply(String reply) {
         this.reply = reply;
+    }
+
+    public Integer getCreditReturned() {
+        return creditReturned;
+    }
+
+    public void setCreditReturned(Integer creditReturned) {
+        this.creditReturned = creditReturned;
+    }
+
+    public Integer getCreditAmount() {
+        return creditAmount;
+    }
+
+    public void setCreditAmount(Integer creditAmount) {
+        this.creditAmount = creditAmount;
     }
 
     public Date getCreateTime() {
