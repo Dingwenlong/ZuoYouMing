@@ -22,10 +22,5 @@ backend/logs/
 docker/mysql/data/
 docker/redis/data/
 
-# Trae documents
-.trae/
-backend/.trae/
-frontend/.trae/
-
 # Environment variables
 .env*.local

@@ -10,6 +10,7 @@ services:
       - "${MYSQL_PORT:-13306}:3306"
     volumes:
       - ./docker/mysql/data:/var/lib/mysql
+      # Keep a single baseline init script under docker/mysql/init/init.sql.
       - ./docker/mysql/init:/docker-entrypoint-initdb.d
     command: --default-authentication-plugin=mysql_native_password
 

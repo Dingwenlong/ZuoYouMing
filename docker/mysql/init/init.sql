@@ -1,3 +1,9 @@
+-- ============================================
+-- 唯一数据库基线初始化脚本
+-- 路径：docker/mysql/init/init.sql
+-- 说明：项目基线表结构与种子数据统一维护在此文件
+-- ============================================
+
 CREATE DATABASE IF NOT EXISTS library_seat DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 USE library_seat;
