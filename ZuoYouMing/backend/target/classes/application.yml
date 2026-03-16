@@ -1,0 +1,53 @@
+server:
+  port: 8082
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: library-seat-system
+  profiles:
+    active: dev
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/library_seat?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true
+    username: root
+    # 请根据实际环境修改密码。默认通常为空或root
+    password: root_password
+    druid:
+      # 连接出错后是否中断启动 (防止死循环重试)
+      break-after-acquire-failure: true
+      # 获取连接重试次数 (默认-1无限重试，改为1次)
+      connection-error-retry-attempts: 1
+      # 失败后重试间隔 (毫秒)
+      time-between-connect-error-millis: 1000
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+      database: 0
+
+wechat:
+  mp:
+    app-id: your-app-id # 待填入
+    app-secret: your-app-secret # 待填入
+
+mybatis-plus:
+  # mapper-locations: classpath*:mapper/**/*.xml # 移除无效配置，使用注解版 Mapper
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  file:
+    name: logs/library-seat.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7
+  level:
+    com.library.seat: debug
