@@ -58,7 +58,7 @@
       @ok="submitAppeal"
       :confirmLoading="submitting"
     >
-      <a-form layout="vertical">
+        <a-form layout="vertical">
         <a-form-item label="违规记录">
           <p>{{ currentRecord?.startTime }} - {{ currentRecord?.seatNo }}</p>
         </a-form-item>
@@ -94,8 +94,10 @@ import {
 } from '@ant-design/icons-vue'
 import { message, Modal } from 'ant-design-vue'
 import { getMyHistory, submitAppeal as submitAppealApi, releaseSeat, type ReservationRecord } from '../../api/reservation'
+import { useUserStore } from '../../stores/user'
 import dayjs from 'dayjs'
 
+const userStore = useUserStore()
 const history = ref<ReservationRecord[]>([])
 const appealVisible = ref(false)
 const submitting = ref(false)
@@ -130,6 +132,9 @@ const handleCancel = (record: ReservationRecord) => {
     onOk: async () => {
       try {
         await releaseSeat(record.id)
+        if (userStore.reservation?.id === record.id) {
+          userStore.clearReservation()
+        }
         message.success('预约已取消')
         fetchHistory()
       } catch (e) {}

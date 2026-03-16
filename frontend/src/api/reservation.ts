@@ -11,6 +11,20 @@ export interface ReservationRecord {
   type: 'appointment' | 'checkin'
 }
 
+export interface ReservationSummary {
+  id: number
+  seatId?: number
+  seatNo?: string
+  slot?: string
+  startTime: string
+  deadline: string | null
+  status?: string
+}
+
+export interface ActiveReservation extends ReservationRecord {
+  deadline: string | null
+}
+
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 // Mock Data
@@ -52,16 +66,27 @@ const mockHistory: ReservationRecord[] = [
     slot: 'morning',
     startTime: '2023-10-22 09:00',
     endTime: '2023-10-22 11:30',
-    status: 'active',
+    status: 'checked_in',
     type: 'checkin'
   }
 ]
 
 export function createReservation(data: { seatId: number, slot: string }) {
   if (USE_MOCK) {
-    return new Promise((resolve) => setTimeout(resolve, 1000))
+    return new Promise<ReservationSummary>((resolve) => {
+      setTimeout(() => {
+        resolve({
+          id: Date.now(),
+          seatId: data.seatId,
+          slot: data.slot,
+          startTime: new Date().toISOString(),
+          deadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          status: 'reserved'
+        })
+      }, 1000)
+    })
   }
-  return request({
+  return request<ReservationSummary>({
     url: '/reservations',
     method: 'post',
     data
@@ -80,7 +105,7 @@ export function getMyHistory() {
 
 export function getActiveReservation() {
   if (USE_MOCK) return Promise.resolve(null)
-  return request<any>({
+  return request<ActiveReservation | null>({
     url: '/reservations/active',
     method: 'get'
   })
@@ -154,7 +179,7 @@ export function reviewAppeal(id: number, data: { status: 'approved' | 'rejected'
 
 export function checkIn(id: number, params: { qrCode?: string; lat?: number; lng?: number }) {
   if (USE_MOCK) return Promise.resolve()
-  return request({
+  return request<boolean>({
     url: `/reservations/${id}/check-in`,
     method: 'post',
     data: params
@@ -163,7 +188,7 @@ export function checkIn(id: number, params: { qrCode?: string; lat?: number; lng
 
 export function temporaryLeave(id: number) {
   if (USE_MOCK) return Promise.resolve()
-  return request({
+  return request<boolean>({
     url: `/reservations/${id}/leave`,
     method: 'post'
   })
@@ -171,7 +196,7 @@ export function temporaryLeave(id: number) {
 
 export function releaseSeat(id: number) {
   if (USE_MOCK) return Promise.resolve()
-  return request({
+  return request<boolean>({
     url: `/reservations/${id}/release`,
     method: 'post'
   })

@@ -153,9 +153,9 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
 
-  // 3. 恢复菜单数据（刷新页面情况）
-  if (userStore.menus.length === 0 && userStore.userInfo) {
-    await userStore.fetchMenus()
+  // 3. 恢复会话数据（刷新页面情况）
+  if (userStore.userInfo) {
+    await userStore.initializeSession()
   }
 
   // 4. 新用户强制绑定信息

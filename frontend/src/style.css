@@ -92,7 +92,7 @@ body {
     width: 100% !important;
   }
   
-  .search-form.ant-form-inline .ant-form-item :deep(.ant-form-item-control-input-content) {
+  .search-form.ant-form-inline .ant-form-item .ant-form-item-control-input-content {
     width: 100% !important;
   }
   

@@ -54,9 +54,9 @@
         <a-form-item label="类型">
           <a-select v-model:value="typeFilter" style="width: 120px" placeholder="选择类型">
             <a-select-option value="all">全部</a-select-option>
-            <a-select-option value="standard">普通座</a-select-option>
-            <a-select-option value="window">靠窗座</a-select-option>
-            <a-select-option value="sofa">沙发座</a-select-option>
+            <a-select-option value="标准">标准座</a-select-option>
+            <a-select-option value="靠窗">靠窗座</a-select-option>
+            <a-select-option value="插座">插座座位</a-select-option>
           </a-select>
         </a-form-item>
 
@@ -97,7 +97,9 @@
                     </div>
                   </div>
                   <template #actions>
-                    <span v-if="seat.status === 'available'" @click="handleBook(seat)">预约</span>
+                    <span v-if="seat.status === 'available' || isAdminOperator" @click="handleBook(seat)">
+                      {{ seat.status === 'available' ? '预约' : '查看' }}
+                    </span>
                     <span v-else style="cursor: not-allowed; color: #ccc">不可用</span>
                   </template>
                 </a-card>
@@ -147,11 +149,11 @@
         </a-form-item>
         
         <a-form-item label="预约时段" required>
-          <a-checkbox-group v-model:value="bookingForm.slots">
-            <a-checkbox value="morning" :disabled="isSlotDisabled('morning')">上午 (08:00-12:00)</a-checkbox>
-            <a-checkbox value="afternoon" :disabled="isSlotDisabled('afternoon')">下午 (13:00-17:00)</a-checkbox>
-            <a-checkbox value="evening" :disabled="isSlotDisabled('evening')">晚间 (18:00-22:00)</a-checkbox>
-          </a-checkbox-group>
+          <a-radio-group v-model:value="bookingForm.slot">
+            <a-radio value="morning" :disabled="isSlotDisabled('morning')">上午 (08:00-12:00)</a-radio>
+            <a-radio value="afternoon" :disabled="isSlotDisabled('afternoon')">下午 (13:00-17:00)</a-radio>
+            <a-radio value="evening" :disabled="isSlotDisabled('evening')">晚间 (18:00-22:00)</a-radio>
+          </a-radio-group>
           <p v-if="allSlotsDisabled" class="text-error mt-2">今日预约已结束</p>
         </a-form-item>
 
@@ -176,11 +178,11 @@
           <a-button danger @click="handleForceRelease" v-if="selectedSeat?.status !== 'available'">强制释放</a-button>
           <a-button danger type="dashed" @click="handleSetFaulty" v-if="selectedSeat?.status !== 'maintenance'">设为故障</a-button>
           <a-button @click="isModalVisible = false">取消</a-button>
-          <a-button type="primary" @click="confirmBooking" :loading="bookingLoading" v-if="selectedSeat?.status === 'available'">确定预约</a-button>
+          <a-button type="primary" @click="confirmBooking" :loading="bookingLoading" :disabled="!bookingForm.slot" v-if="selectedSeat?.status === 'available'">确定预约</a-button>
         </div>
         <div v-else>
           <a-button @click="isModalVisible = false">取消</a-button>
-          <a-button type="primary" @click="confirmBooking" :loading="bookingLoading" :disabled="selectedSeat?.status !== 'available'">确定预约</a-button>
+          <a-button type="primary" @click="confirmBooking" :loading="bookingLoading" :disabled="selectedSeat?.status !== 'available' || !bookingForm.slot">确定预约</a-button>
         </div>
       </template>
     </a-modal>
@@ -217,7 +219,7 @@ const selectedSeat = ref<Seat | null>(null)
 const isMobile = ref(false)
 const bookingLoading = ref(false)
 const bookingForm = reactive({
-  slots: [] as string[]
+  slot: undefined as string | undefined
 })
 
 const isSlotPast = (slot: string) => {
@@ -258,6 +260,10 @@ import { createReservation } from '../api/reservation'
 
 const userStore = useUserStore()
 const userInfo = computed(() => userStore.userInfo)
+const isAdminOperator = computed(() => {
+  const role = userInfo.value?.role
+  return role === 'admin' || role === 'librarian'
+})
 
 const seats = ref<Seat[]>([])
 
@@ -287,8 +293,8 @@ const handleReservationUpdate = (data: { event: string, reason: string }) => {
 }
 
 onMounted(async () => {
-  await userStore.syncReservationStatus()
-  fetchSeats()
+  await userStore.initializeSession()
+  await fetchSeats()
   checkMobile()
   window.addEventListener('resize', checkMobile)
   
@@ -365,8 +371,8 @@ const mapSeats = computed<MapSeat[]>(() => {
       return {
         id: seat.id!,
         label: seat.seatNo,
-        x: seat.x || 100 + (index % 6) * 100,
-        y: seat.y || 100 + Math.floor(index / 6) * 80,
+        x: seat.x ?? 100 + (index % 6) * 100,
+        y: seat.y ?? 100 + Math.floor(index / 6) * 80,
         status: seat.status,
         type: 'normal',
         slotStatuses: s.slotStatuses
@@ -399,16 +405,22 @@ const handleBook = (seat: Seat) => {
     message.info('访客仅可查看座位状态，请登录后预约')
     return
   }
+
+  if (seat.status !== 'available' && !isAdminOperator.value) {
+    message.info('该座位当前不可预约')
+    return
+  }
+
   selectedSeat.value = seat
   
   // 设置默认时段为第一个可用的时段
-  bookingForm.slots = []
+  bookingForm.slot = undefined
   if (!isSlotDisabled('morning')) {
-    bookingForm.slots.push('morning')
+    bookingForm.slot = 'morning'
   } else if (!isSlotDisabled('afternoon')) {
-    bookingForm.slots.push('afternoon')
+    bookingForm.slot = 'afternoon'
   } else if (!isSlotDisabled('evening')) {
-    bookingForm.slots.push('evening')
+    bookingForm.slot = 'evening'
   }
   
   isModalVisible.value = true
@@ -467,7 +479,7 @@ const handleSetFaulty = async () => {
 }
 
 const confirmBooking = async () => {
-  if (!bookingForm.slots || bookingForm.slots.length === 0) {
+  if (!bookingForm.slot) {
     message.warning('请选择预约时段')
     return
   }
@@ -475,41 +487,37 @@ const confirmBooking = async () => {
   bookingLoading.value = true
   try {
     if (selectedSeat.value) {
-      // 逐个时段创建预约
-      let firstRes: any = null
-      for (const slot of bookingForm.slots) {
-        const res = await createReservation({
-          seatId: selectedSeat.value.id!,
-          slot: slot
-        })
-        if (!firstRes) firstRes = res
-      }
-
-      const resData = (firstRes as any)?.data
+      const resData = await createReservation({
+        seatId: selectedSeat.value.id!,
+        slot: bookingForm.slot
+      })
 
       if (resData && resData.id) {
         // 更新座位状态 (如果是当前时段，则设为 occupied)
         const currentSlot = getCurrentSlot()
-        if (bookingForm.slots.includes(currentSlot)) {
+        if (bookingForm.slot === currentSlot) {
           selectedSeat.value.status = 'occupied'
         }
 
-        // 触发全局倒计时 (针对第一个时段)
+        // 先写入本地状态，再向后端同步一次兜底。
         userStore.setReservation(
           resData.id,
           selectedSeat.value.id!,
           selectedSeat.value.seatNo,
           new Date(resData.startTime).getTime(),
-          new Date(resData.deadline).getTime()
+          resData.deadline ? new Date(resData.deadline).getTime() : null,
+          'reserved',
+          bookingForm.slot
         )
+        await userStore.syncReservationStatus()
       }
 
       message.success(`预约成功！请在规定时间内签到。`)
       isModalVisible.value = false
-      fetchSeats() // 刷新列表以获取最新的 slotStatuses
+      await fetchSeats() // 刷新列表以获取最新的 slotStatuses
     }
   } catch (error) {
-    message.error((error as any).response?.data?.msg || '预约失败')
+    message.error((error as Error).message || '预约失败')
   } finally {
     bookingLoading.value = false
   }

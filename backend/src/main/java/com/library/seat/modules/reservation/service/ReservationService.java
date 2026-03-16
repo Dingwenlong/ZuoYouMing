@@ -3,9 +3,14 @@ package com.library.seat.modules.reservation.service;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,6 +155,20 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
                     return Result.error("请选择预约时段");
                 }
             }
+            slots = new java.util.ArrayList<>(new LinkedHashSet<>(slots));
+            Date now = new Date();
+
+            Map<String, Date[]> slotWindows = new HashMap<>();
+            for (String slot : slots) {
+                Date[] window = resolveSlotWindow(now, slot);
+                if (window == null) {
+                    return Result.error("无效的预约时段: " + slot);
+                }
+                if (!window[1].after(now)) {
+                    return Result.error("时段 " + getSlotLabel(slot) + " 已结束，请选择其他时段");
+                }
+                slotWindows.put(slot, window);
+            }
 
             // 2. 预检查：验证所有时段是否都可用（避免部分预约成功）
             for (String slot : slots) {
@@ -173,7 +192,6 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
             }
 
             // 3. 创建预约 - 使用批量插入确保原子性
-            Date now = new Date();
             List<Reservation> createdReservations = new java.util.ArrayList<>();
             
             // 先构建所有预约对象
@@ -187,34 +205,9 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
                 }
                 
                 // 计算该时段的起止时间
-                java.util.Calendar cal = java.util.Calendar.getInstance();
-                cal.setTime(now);
-                int year = cal.get(java.util.Calendar.YEAR);
-                int month = cal.get(java.util.Calendar.MONTH);
-                int day = cal.get(java.util.Calendar.DAY_OF_MONTH);
-                
-                java.util.Calendar startCal = java.util.Calendar.getInstance();
-                startCal.set(year, month, day, 0, 0, 0);
-                java.util.Calendar endCal = java.util.Calendar.getInstance();
-                endCal.set(year, month, day, 0, 0, 0);
-                
-                switch (slot) {
-                    case "morning":
-                        startCal.set(java.util.Calendar.HOUR_OF_DAY, 8);
-                        endCal.set(java.util.Calendar.HOUR_OF_DAY, 12);
-                        break;
-                    case "afternoon":
-                        startCal.set(java.util.Calendar.HOUR_OF_DAY, 13);
-                        endCal.set(java.util.Calendar.HOUR_OF_DAY, 17);
-                        break;
-                    case "evening":
-                        startCal.set(java.util.Calendar.HOUR_OF_DAY, 18);
-                        endCal.set(java.util.Calendar.HOUR_OF_DAY, 22);
-                        break;
-                }
-                
-                res.setStartTime(startCal.getTime());
-                res.setEndTime(endCal.getTime());
+                Date[] window = slotWindows.get(slot);
+                res.setStartTime(window[0]);
+                res.setEndTime(window[1]);
                 
                 // 设置签到截止时间: 
                 // 1. 标准截止时间: start_time + checkin_after_window
@@ -238,7 +231,6 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
 
             // 5. 广播更新
             broadcastReservationUpdate(reservation.getUserId(), "reservation_success", "预约成功");
-            statsService.broadcastStats();
 
             // 6. 发送通知
             notificationService.send(reservation.getUserId(), "预约成功", "您已成功预约座位 " + seat.getSeatNo() + " (" + String.join(",", slots) + ")，请在规定时间内签到。", "success");
@@ -250,8 +242,12 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
             Reservation first = createdReservations.get(0);
             Map<String, Object> result = new HashMap<>();
             result.put("id", first.getId());
+            result.put("seatId", first.getSeatId());
+            result.put("seatNo", seat.getSeatNo());
+            result.put("slot", first.getSlot());
             result.put("startTime", first.getStartTime());
             result.put("deadline", first.getDeadline());
+            result.put("status", first.getStatus());
 
             return Result.success(result);
         } finally {
@@ -410,6 +406,46 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         }
 
         return Result.success(true);
+    }
+
+    private Date[] resolveSlotWindow(Date baseDate, String slot) {
+        java.util.Calendar startCal = java.util.Calendar.getInstance();
+        startCal.setTime(baseDate);
+        startCal.set(java.util.Calendar.MINUTE, 0);
+        startCal.set(java.util.Calendar.SECOND, 0);
+        startCal.set(java.util.Calendar.MILLISECOND, 0);
+
+        java.util.Calendar endCal = (java.util.Calendar) startCal.clone();
+        switch (slot) {
+            case "morning":
+                startCal.set(java.util.Calendar.HOUR_OF_DAY, 8);
+                endCal.set(java.util.Calendar.HOUR_OF_DAY, 12);
+                break;
+            case "afternoon":
+                startCal.set(java.util.Calendar.HOUR_OF_DAY, 13);
+                endCal.set(java.util.Calendar.HOUR_OF_DAY, 17);
+                break;
+            case "evening":
+                startCal.set(java.util.Calendar.HOUR_OF_DAY, 18);
+                endCal.set(java.util.Calendar.HOUR_OF_DAY, 22);
+                break;
+            default:
+                return null;
+        }
+        return new Date[] { startCal.getTime(), endCal.getTime() };
+    }
+
+    private String getSlotLabel(String slot) {
+        switch (slot) {
+            case "morning":
+                return "上午";
+            case "afternoon":
+                return "下午";
+            case "evening":
+                return "晚间";
+            default:
+                return slot;
+        }
     }
 
     private double calculateDistance(double lat1, double lng1, double lat2, double lng2) {
@@ -574,22 +610,29 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
 
     @Transactional(rollbackFor = Exception.class)
     public void terminateActiveReservationBySeat(Long seatId, String reason, boolean includeStats) {
-        // 查找该座位下的活跃预约 (reserved, checked_in, away)
-        Reservation reservation = this.getOne(new LambdaQueryWrapper<Reservation>()
+        List<Reservation> reservations = this.list(new LambdaQueryWrapper<Reservation>()
                 .eq(Reservation::getSeatId, seatId)
-                .in(Reservation::getStatus, "reserved", "checked_in", "away")
-                .last("LIMIT 1"));
+                .in(Reservation::getStatus, "reserved", "checked_in", "away"));
 
-        if (reservation != null) {
-            reservation.setStatus("completed");
-            reservation.setEndTime(new Date());
-            this.updateById(reservation);
-            
-            // 通知学生预约已结束
-            broadcastReservationUpdate(reservation.getUserId(), "reservation_ended", reason, includeStats);
+        if (!reservations.isEmpty()) {
+            Date now = new Date();
+            Set<Long> affectedUserIds = new HashSet<>();
 
-            // 发送系统通知
-            notificationService.send(reservation.getUserId(), "预约被取消", "您预约的座位已被管理员取消，原因: " + reason, "warning");
+            for (Reservation reservation : reservations) {
+                reservation.setStatus("completed");
+                reservation.setEndTime(now);
+                this.updateById(reservation);
+                affectedUserIds.add(reservation.getUserId());
+            }
+
+            for (Long userId : affectedUserIds) {
+                broadcastReservationUpdate(userId, "reservation_ended", reason, false);
+                notificationService.send(userId, "预约被取消", "您预约的座位已被管理员取消，原因: " + reason, "warning");
+            }
+
+            if (includeStats) {
+                statsService.broadcastStats();
+            }
         }
     }
 
@@ -597,11 +640,17 @@ public class ReservationService extends ServiceImpl<ReservationMapper, Reservati
         List<Reservation> list = this.list(new LambdaQueryWrapper<Reservation>()
                 .eq(Reservation::getUserId, userId)
                 .orderByDesc(Reservation::getCreateTime));
-        
-        // 补全座位号
+
+        Map<Long, String> seatNoMap = seatService.listByIds(list.stream()
+                        .map(Reservation::getSeatId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .collect(Collectors.toList()))
+                .stream()
+                .collect(Collectors.toMap(Seat::getId, Seat::getSeatNo, (left, right) -> left));
+
         for (Reservation res : list) {
-            Seat seat = seatService.getById(res.getSeatId());
-            if (seat != null) res.setSeatNo(seat.getSeatNo());
+            res.setSeatNo(seatNoMap.get(res.getSeatId()));
         }
         
         return Result.success(list);

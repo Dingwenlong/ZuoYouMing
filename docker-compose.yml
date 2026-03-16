@@ -1,14 +1,13 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: library-mysql
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root_password
       MYSQL_DATABASE: library_seat
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-13306}:3306"
     volumes:
       - ./docker/mysql/data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d
@@ -16,17 +15,15 @@ services:
 
   redis:
     image: redis:6.0
-    container_name: library-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - ./docker/redis/data:/data
     command: redis-server --appendonly yes
 
   emqx:
     image: emqx/emqx:5.0.0
-    container_name: library-emqx
     restart: always
     ports:
       - "11883:1883"
