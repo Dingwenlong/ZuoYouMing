@@ -498,7 +498,6 @@ const confirmBooking = async () => {
         if (bookingForm.slot === currentSlot) {
           selectedSeat.value.status = 'occupied'
         }
-
         // 先写入本地状态，再向后端同步一次兜底。
         userStore.setReservation(
           resData.id,
